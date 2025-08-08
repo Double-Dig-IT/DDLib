@@ -1,4 +1,16 @@
-﻿namespace DDigit.MetaData;
+﻿
+namespace DDigit.MetaData;
+
+/// <summary>
+/// Represents the info for internal links.
+/// 
+/// 2024-05-13 BDD Added extra properties.
+/// </summary>
+/// <param name="objectType"></param>
+/// <param name="stream"></param>
+/// <param name="encoding"></param>
+/// <param name="filename"></param>
+/// <param name="trace"></param>
 
 public class InternalLinkData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? filename, bool trace) :
   BaseData(objectType, stream, encoding, filename, Properties, trace)
@@ -44,10 +56,21 @@ public class InternalLinkData(ObjectTypeEnum objectType, Stream stream, Encoding
     get; private set;
   }
 
+
+  public string? RelatedTermLinkIdTag
+  {
+    get; private set;
+  }
+
   /// <summary>
   /// The equivalent term tag.
   /// </summary>
   public string? EquivalentTermTag
+  {
+    get; private set;
+  }
+
+  public string? EquivalentTermLinkIdTag
   {
     get; private set;
   }
@@ -60,10 +83,20 @@ public class InternalLinkData(ObjectTypeEnum objectType, Stream stream, Encoding
     get; private set;
   }
 
+  public string? UseTermLinkIdTag
+  {
+    get; private set;
+  }
+
   /// <summary>
   /// The used for term tag.
   /// </summary>
   public string? UsedForTermTag
+  {
+    get; private set;
+  }
+
+  public string? UsedForTermLinkIdTag
   {
     get; private set;
   }
@@ -132,6 +165,48 @@ public class InternalLinkData(ObjectTypeEnum objectType, Stream stream, Encoding
     get; private set;
   }
 
+  /// <summary>
+  /// Is this an indexed link?
+  /// </summary>
+  public bool IndexedLink
+  {
+    get; private set;
+  }
+
+
+  /// <summary>
+  /// Sort field for broader relations
+  /// </summary>
+  public string? BroaderSortField
+  {
+    get; private set;
+  }
+
+  /// <summary>
+  /// Sort field for narrower relations
+  /// </summary>
+  public string? NarrowerSortField
+  {
+    get; private set;
+  }
+
+  /// <summary>
+  /// The sort order of broader relationships.
+  /// </summary>
+  public SortOrderEnum BroaderSortOrder
+  {
+    get; private set;
+  }
+
+  /// <summary>
+  /// The sort order of narrower relationships.
+  /// </summary>
+  public SortOrderEnum NarrowerSortOrder
+  {
+    get; private set;
+  }
+
+
   public override string ToString() => $"{RelationType} {TermTag}";
 
   internal void Add(LinkNodeData node)
@@ -158,6 +233,60 @@ public class InternalLinkData(ObjectTypeEnum objectType, Stream stream, Encoding
       {
         AddToParent(parent.ChildNodes, node);
       }
+    }
+  }
+
+  private static string LinkIdTag(DatabaseData databaseData, string? linkTag)
+  {
+    var fieldData = databaseData.FindFieldByTagOrName(linkTag ??
+      throw new NullReferenceException(nameof(LinkIdTag))) ??
+      throw new FieldNotFoundException(linkTag, databaseData.Name);
+    return fieldData.LinkIdTag ?? throw new NullReferenceException(fieldData.LinkIdTag);
+  }
+
+  internal void AddLinkRefs(DatabaseData databaseData)
+  {
+    if (!string.IsNullOrWhiteSpace(BroaderTermTag))
+    {
+      if (string.IsNullOrEmpty(NarrowerTermTag))
+      {
+        throw new MissingRelationTagException("Narrower term", BroaderTermTag);
+      }
+      if (string.IsNullOrWhiteSpace(BroaderTermLinkIdTag))
+      {
+        BroaderTermLinkIdTag = LinkIdTag(databaseData, BroaderTermTag);
+      }
+    }
+
+    if (!string.IsNullOrWhiteSpace(NarrowerTermTag))
+    {
+      if (string.IsNullOrEmpty(BroaderTermTag))
+      {
+        throw new MissingRelationTagException("Broader term", NarrowerTermTag);
+      }
+      if (string.IsNullOrWhiteSpace(NarrowerTermLinkIdTag))
+      {
+        NarrowerTermLinkIdTag = LinkIdTag(databaseData, NarrowerTermTag);
+      }
+    }
+
+    if (!string.IsNullOrWhiteSpace(RelatedTermTag) && string.IsNullOrWhiteSpace(RelatedTermLinkIdTag))
+    {
+      RelatedTermLinkIdTag = LinkIdTag(databaseData, RelatedTermTag);
+    }
+
+    if (!string.IsNullOrWhiteSpace(EquivalentTermTag) && string.IsNullOrWhiteSpace(EquivalentTermLinkIdTag))
+    {
+      EquivalentTermLinkIdTag = LinkIdTag(databaseData, EquivalentTermTag);
+    }
+
+    if (!string.IsNullOrWhiteSpace(UseTermTag) && string.IsNullOrWhiteSpace(UseTermLinkIdTag))
+    {
+      UseTermLinkIdTag = LinkIdTag(databaseData, UseTermTag);
+    }
+    if (!string.IsNullOrWhiteSpace(UsedForTermTag) && string.IsNullOrWhiteSpace(UsedForTermLinkIdTag))
+    {
+      UsedForTermLinkIdTag = LinkIdTag(databaseData, UsedForTermTag);
     }
   }
 
@@ -188,6 +317,11 @@ public class InternalLinkData(ObjectTypeEnum objectType, Stream stream, Encoding
         new PropertyMap (13, DataTypesEnum.String, "BroaderTermLinkIdTag"),
         new PropertyMap (14, DataTypesEnum.String, "NarrowerTermLinkIdTag"),
         new PropertyMap (15, DataTypesEnum.String, "FormatString"),
-        new PropertyMap (16, DataTypesEnum.Bool,   "AllowDuplicates")
+        new PropertyMap (16, DataTypesEnum.Bool,   "AllowDuplicates"),
+        new PropertyMap (17, DataTypesEnum.Bool,   "IndexedLink"),
+        new PropertyMap (18, DataTypesEnum.String, "BroaderSortField"),
+        new PropertyMap (19, DataTypesEnum.String, "NarrowerSortField"),
+        new PropertyMap (20, DataTypesEnum.Int16,  "BroaderSortOrder", typeof (SortOrderEnum)),
+        new PropertyMap (21, DataTypesEnum.Int16,  "NarrowerSortOrder", typeof (SortOrderEnum))
    ];
 }

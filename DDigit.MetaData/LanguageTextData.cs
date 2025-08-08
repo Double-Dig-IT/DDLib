@@ -1,8 +1,19 @@
 ﻿namespace DDigit.MetaData;
 
-public class LanguageTextData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace) :
-  BaseData(objectType, stream, encoding, fileName, Properties, trace)
+public class LanguageTextData : BaseData
 {
+  public LanguageTextData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace) :
+    base (objectType, stream, encoding, fileName, Properties, trace)
+  {
+
+  }
+
+  public LanguageTextData(ObjectTypeEnum objectType, string? text) : base (objectType, Properties)
+  {
+    Text = text;
+    ElementCount = 1;
+  }
+
   public string? Text
   {
     get;

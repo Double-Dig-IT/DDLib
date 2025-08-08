@@ -9,6 +9,6 @@ public partial class DDataProvider : IDataProvider
     {
       throw new NullReferenceException(nameof(databaseData));
     }
-    return await Repository.GetRecordLock(databaseData);
+    return await Repository.GetRecordLock(databaseData, CancellationToken.None);
   }
 }

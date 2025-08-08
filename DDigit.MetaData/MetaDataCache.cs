@@ -17,14 +17,13 @@ public class MetaDataCache
 
   public static IEnumerable<DatabaseData> FindDatabases(string workingDirectory, string? databaseName = "*", bool trace = false)
   {
-    var extension = new DatabaseData().Extension;
     var result = new List<DatabaseData>();
-    foreach (var fileInfo in new DirectoryInfo(workingDirectory).GetFiles($"{databaseName}{extension}"))
+    foreach (var fileInfo in new DirectoryInfo(workingDirectory).GetFiles($"{databaseName}{DatabaseData.Extension}"))
     {
-      var metaData = ReadDatabase(fileInfo.FullName, trace);
-      if (metaData != null)
+      var databaseData = ReadFromCache<DatabaseData>(fileInfo.FullName, trace);
+      if (databaseData != null)
       {
-        result.Add(metaData);
+        result.Add(databaseData);
       }
     }
     return result;
@@ -32,36 +31,46 @@ public class MetaDataCache
 
   public static IEnumerable<FormData> FindForms(string folder, string? formName = "*", bool trace = false)
   {
-    var extension = new FormData().Extension;
     var result = new List<FormData>();
-    foreach (var fileInfo in new DirectoryInfo(folder).GetFiles($"{formName}{extension}"))
+    foreach (var fileInfo in new DirectoryInfo(folder).GetFiles($"{formName}{FormData.Extension}"))
     {
-      var metaData = ReadForm(fileInfo.FullName, trace);
-      if (metaData != null)
+      var formData = ReadFromCache<FormData>(fileInfo.FullName, trace);
+      if (formData != null)
       {
-        result.Add(metaData);
+        result.Add(formData);
       }
     }
     return result;
   }
 
-  public static DatabaseData? ReadDatabase(string folder, string database, bool trace) =>
-    ReadDatabase($"{folder}{Path.DirectorySeparatorChar}{database}{new DatabaseData().Extension}", trace);
+  public static DatabaseData? ReadDatabase(string folder, string database, bool trace = false)
+  {
+    var path = Path.Combine(folder, database);
+    var fileInfo = new FileInfo(path);
+    if (!fileInfo.Extension.Equals(".inf", StringComparison.OrdinalIgnoreCase))
+    {
+      path += ".inf";
+    }
+    return ReadDatabase(path, trace);
+  }
 
   public static DatabaseData? ReadDatabase(string fileName, bool trace)
   {
-    int greaterThan = fileName.IndexOf('>');
+    var greaterThan = fileName.IndexOf('>');
     if (greaterThan > 0)
     {
       fileName = fileName[..greaterThan];
     }
-    var extension = new DatabaseData().Extension;
-    return ReadFromCache<DatabaseData>(AddExtension(fileName.Replace('+', Path.DirectorySeparatorChar), extension), trace);
+    var databaseData = ReadFromCache<DatabaseData>(AddExtension(fileName.Replace('+', Path.DirectorySeparatorChar), DatabaseData.Extension), trace);
+    databaseData?.GetRecordMetaDataFields();
+    databaseData?.GetLocationFields();
+    databaseData?.GetAutoNumberingFields();
+    return databaseData;
   }
 
   static T? ReadFromCache<T>(string fileName, bool trace) where T : FileData, new()
   {
-    T? result = default;
+    T? result;
     var fileInfo = new FileInfo(fileName);
     var fullName = fileInfo.FullName;
 
@@ -80,6 +89,10 @@ public class MetaDataCache
       {
         result = AddToCache<T>(fullName, fileName, trace);
       }
+      else
+      {
+        throw new FileNotFoundException(fullName);
+      }
     }
     return result;
   }
@@ -95,12 +108,12 @@ public class MetaDataCache
   private static string AddExtension(string fileName, string extension) =>
     fileName.EndsWith(extension, StringComparison.CurrentCultureIgnoreCase) ? fileName : fileName + extension;
 
-  private static FormData? ReadForm(string fileName, bool trace) => 
-    ReadFromCache<FormData>(AddExtension(fileName, new FormData().Extension), trace);
+  private static FormData? ReadForm(string fileName, bool trace) =>
+    ReadFromCache<FormData>(AddExtension(fileName, FormData.Extension), trace);
 
   public static DatabaseData? FirstDatabase(string folder, bool trace)
   {
-    var files = new DirectoryInfo(folder).GetFiles($"*{new DatabaseData().Extension}");
+    var files = new DirectoryInfo(folder).GetFiles($"*{DatabaseData.Extension}");
     return files.Length > 0 ? ReadDatabase(files[0].FullName, trace) : null;
   }
 

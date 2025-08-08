@@ -1,4 +1,4 @@
-﻿namespace DDigit.PowerShell;
+﻿namespace DDigit.Scripting.CommandLets;
 
 /// <summary>
 /// Get a list of pointer files
@@ -16,17 +16,35 @@ public class GetAdlibPointerFile : DDCmdlet
     get; set;
   } = "*";
 
+  [Parameter()]
+  public int StartFrom
+  {
+    get; set;
+  } = 1;
+
+  [Parameter()]
+  public int Limit
+  {
+    get; set;
+  } = 0;
+
+  [Parameter()]
+  public string? SearchTerm
+  {
+    get; set;
+  }
+
   /// <summary>
   /// Do the work
   /// </summary>
   protected override async void ProcessRecord()
   {
-    var pointerFiles = await provider.GetRecordSetMetaData(WorkingDirectory, Database, null);
+    var sets = await provider.GetRecordSetMetaDataAsync(WorkingDirectory, Database, null, SearchTerm, StartFrom, Limit, default);
     if (SessionState != null)
     {
-      foreach (var pointerFile in pointerFiles)
+      foreach (var set in sets)
       {
-        WriteObject(pointerFile);
+        WriteObject(set);
       }
     }
   }

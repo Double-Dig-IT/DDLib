@@ -1,4 +1,4 @@
-﻿namespace DDigit.PowerShell;
+﻿namespace DDigit.Scripting;
 
 /// <summary>
 /// Set n Adlib user
@@ -10,7 +10,7 @@ public class SetAdlibUser : DDCmdlet
   /// The user to set
   /// </summary>
   [Parameter(Mandatory = true)]
-  public string? User
+  public required string User
   {
     get; set;
   }
@@ -38,6 +38,6 @@ public class SetAdlibUser : DDCmdlet
   /// </summary>
   protected override void ProcessRecord()
   {
-    provider.SetUser(WorkingDirectory, User!, Role, Password);
+    provider.SetUser(WorkingDirectory, User, Role, Password);
   }
 }

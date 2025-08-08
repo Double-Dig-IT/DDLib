@@ -1,4 +1,6 @@
-﻿namespace DDigit.Data;
+﻿using DDigit.Search;
+
+namespace DDigit.Data;
 
 public interface IDataProvider
 {
@@ -6,26 +8,30 @@ public interface IDataProvider
 
   event EventHandler<MilestoneEventArgs>? MilestoneReached;
 
-  Task<Record?> GetRecord(DatabaseData linkDatabase, string table, int id);
+  Task<Record?> ReadRecordAsync(DatabaseData database, int id,
+                                IDbConnection? connection, 
+                                IDbTransaction? transaction,
+                                CancellationToken cancellationToken);
 
-  Task WriteRecordAsync(Record record);
+  Task WriteRecordAsync(Record record, IDbConnection? connection, IDbTransaction? transaction, CancellationToken cancellationToken);
 
   ResultSet JoinRecordSet(ResultSet left, BooleanOperator @operator, ResultSet right);
 
-  Task<Record?> ReadRecord(string folder, string database, int id);
+  Task<Record?> ReadRecordAsync(string folder, string database, int id, CancellationToken cancellationToken);
 
-  Task<ResultSet?> FindRecordSet(string folder, string database, string[]? dataset, string fieldOrTag, string? language,
-                                 string? value, ResultSet? results);
+  Task<ResultSet?> FindRecordSet(string folder, string database, IEnumerable<string>? dataset, string fieldOrTag, string? language,
+                                 string value, ResultSet? results, CancellationToken cancellationToken);
 
   IEnumerable<FieldData> GetTaskField(string folder);
 
   IEnumerable<SqlSetting> GetSqlServer(string folder);
 
-  Task<ResultSet> GetRecordSet(string folder, string database, int set);
+  Task<ResultSet> GetRecordSetAsync(string folder, string database, int set, CancellationToken cancellationToken);
 
   Task<IEnumerable<RecordLock>> GetRecordLock(string Folder);
 
-  Task<List<RecordSetMetaData>> GetRecordSetMetaData(string folder, string? databaseName, HashSet<int>? sets);
+  Task<RecordSetList> GetRecordSetMetaDataAsync(string folder, string? databaseName, HashSet<int>? sets, 
+                                                     string? searchTerm, int startFrom, int limit, CancellationToken cancellationToken);
 
   void SetUser(string workingDirectory, string user, string? role, string? password);
 
@@ -51,13 +57,23 @@ public interface IDataProvider
 
   IEnumerable<string> GetCacheEntries();
 
-  Task<ResultSet?> Search(string folder, string database, string[]? datasets, string statement, ResultSet? results = null, int milestone = 1000);
+  Task<ResultSet?> SearchAsync(string folder, string database, IEnumerable<string>? datasets, string statement,
+                          ResultSet? results, int milestone, CancellationToken cancellationToken);
 
-  Task<AutoCompleteResult?> GetAutoComplete(string folder, string database, string[]? datasets, string[] fields, string? value, int? startFrom, int? limit, string? language, bool count);
+  Task<AutoCompleteResult?> GetAutoComplete(string folder, string database, IEnumerable<string>? datasets,
+                                            string[] fields, string? value, int? startFrom, int? limit, string? language, bool count,
+                                            CancellationToken cancellationToken);
 
-  Task<ResultSet?> RandomSample(string folder, string? database, string[]? datasets, ResultSet? results, int sample, int? seed, bool unique);
+  Task<ResultSet?> RandomSample(string folder, string database, IEnumerable<string>? datasets, ResultSet? results, int sample,
+                                int? seed, bool unique, CancellationToken cancellationToken);
 
   Record NewRecord(string folder, string database, string? dataset);
 
-  IEnumerable<FormData> GetForm(string workingDirectory, string? fileName = "*");
+  IEnumerable<FormData> GetForm(string folder, string? fileName = "*");
+
+  Task RemoveRecord(string folder, string database, int id, CancellationToken cancellationToken);
+
+  Task DeleteRecordAsync(Record record, CancellationToken cancellationToken);
+  Task <string> GetAutoNumberValue(IDbConnection connection, IDbTransaction transaction,
+                            FieldData fieldData, CancellationToken cancellationToken);
 }

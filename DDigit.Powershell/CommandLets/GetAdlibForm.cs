@@ -1,4 +1,4 @@
-﻿namespace DDigit.PowerShell;
+﻿namespace DDigit.Scripting;
 
 /// <summary>
 /// Get the forms from a folder
@@ -10,6 +10,7 @@ public class GetAdlibForm : DDCmdlet
   /// <summary>
   /// The name of the form
   /// </summary>
+  [Parameter]
   public string? FormName
   {
     get; set;

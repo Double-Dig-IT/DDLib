@@ -25,5 +25,6 @@ public enum MethodTypeEnum
   CollectionCloudPublish = 20,
   EuropeAna = 21,
   BulkInsert = 22,
-  QSearch = 23
+  QSearch = 23,
+  CopyRecord = 24
 }

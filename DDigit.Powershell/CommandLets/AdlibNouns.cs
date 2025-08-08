@@ -1,4 +1,4 @@
-﻿namespace DDigit.PowerShell;
+﻿namespace DDigit.Scripting;
 
 internal static class AdlibNouns
 {

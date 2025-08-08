@@ -1,6 +1,6 @@
 ﻿namespace DDigit.MetaData;
 
-public class ApplicationSettingData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace) : 
+public class ApplicationSettingData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace) :
   BaseData(objectType, stream, encoding, fileName, Properties, trace)
 {
   public bool ListScreenOptional
@@ -171,7 +171,7 @@ public class ApplicationSettingData(ObjectTypeEnum objectType, Stream stream, En
 
   public AuthenticationTypeEnum AuthenticationType
   {
-    get; private set;
+    get; set;
   }
 
   public string? AuthenticationSource

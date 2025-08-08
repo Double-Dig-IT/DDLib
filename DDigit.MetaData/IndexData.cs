@@ -3,12 +3,12 @@
 public class IndexData : BaseData
 {
 
-  public IndexData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, DatabaseData database, bool trace) : base (objectType, stream, encoding, fileName, Properties, trace)
+  public IndexData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, DatabaseData database, bool trace) : base(objectType, stream, encoding, fileName, Properties, trace)
   {
     this.database = database;
   }
 
-  internal IndexData(DatabaseData database) : base (ObjectTypeEnum.Index, string.Empty)
+  internal IndexData(DatabaseData database) : base(ObjectTypeEnum.Index, string.Empty)
   {
     this.database = database;
   }
@@ -34,7 +34,7 @@ public class IndexData : BaseData
   /// <summary>
   /// Obsolete: block size was used for non-SQL database
   /// </summary>
-  internal int BlockSize
+  internal short BlockSize
   {
     get; private set;
   }
@@ -42,7 +42,7 @@ public class IndexData : BaseData
   /// <summary>
   /// Obsolete: the number of nodes that were cached for non-SQL database
   /// </summary>
-  internal int NodesCached
+  internal short NodesCached
   {
     get; private set;
   }
@@ -50,7 +50,7 @@ public class IndexData : BaseData
   /// <summary>
   /// Obsolete: retrieval block size was used for non-SQL database
   /// </summary>
-  internal int RetrievalBlockSize
+  internal short RetrievalBlockSize
   {
     get; private set;
   }
@@ -66,7 +66,7 @@ public class IndexData : BaseData
   /// <summary>
   /// The key size
   /// </summary>
-  public int Length
+  public short Length
   {
     get; private set;
   }
@@ -90,7 +90,7 @@ public class IndexData : BaseData
   /// <summary>
   /// Obsolete, was used for File based Adlib: the physical key size
   /// </summary>
-  internal int PhysicalKeySize
+  internal short PhysicalKeySize
   {
     get; private set;
   }
@@ -98,7 +98,7 @@ public class IndexData : BaseData
   /// <summary>
   /// Obsolete, was used for File based Adlib: the file number for the index
   /// </summary>
-  internal int FileNumber
+  internal short FileNumber
   {
     get; private set;
   }
@@ -220,6 +220,8 @@ public class IndexData : BaseData
   }
 
   public bool HasDomain => !string.IsNullOrEmpty(DomainTag);
+
+  public bool UseFullText => database.FullText && !Unique && Type != IndexTypeEnum.AlphaNumeric && Type != IndexTypeEnum.Boolean;
 
   private static readonly char[] separators = [',', ' '];
 }

@@ -1,15 +1,17 @@
-﻿
-namespace DDigit.Repository;
+﻿namespace DDigit.Repository;
 
 public interface IDDRepository
 {
-  Task<int> FindLink(string tableName, string? domain, string v, string language);
+  Task<int> FindLink(string tableName, DatasetData? dataset,
+                     string? domain, string value, string language,
+                     IDbConnection connection, IDbTransaction transaction, CancellationToken cancellationToken);
 
-  Task<List<RecordSetMetaData>> GetRecordSetPerDatabase(DatabaseData database);
+  Task<RecordSetList> GetRecordSetMetaDataPerDatabaseAsync(DatabaseData database, string? searchTerm, int startFrom = 1, int limit = 0, 
+                                                        CancellationToken cancellationToken = default);
 
-  Task<IEnumerable<RecordLock>> GetRecordLock(DatabaseData databaseData);
+  Task<IEnumerable<RecordLock>> GetRecordLock(DatabaseData databaseData, CancellationToken cancellationToken);
 
-  Task<int> AddWord(string text, string language);
+  Task<int> AddWord(IDbConnection connection, IDbTransaction transaction, string text, string language, CancellationToken cancellationToken);
 
   /// <summary>
   /// Retrieve a result set, (aka pointer file)
@@ -19,45 +21,77 @@ public interface IDDRepository
   /// <param name="filter">Filter on datasets</param>
   /// <param name="previousResults">Any previous results from the PowerShell pipeline</param>
   /// <returns>The new ResultSet</returns>
-  Task<ResultSet> GetResultSet(DatabaseData databaseData, int set, DatasetFilter? filter, ResultSet? previousResults);
+  Task<ResultSet> GetResultSetAsync(SearchTree searchTree, int set);
 
-  Task<int> GetWordNumber(string text, string language);
+  Task<int> GetWordNumber(IDbConnection connection, IDbTransaction transaction, string text, string language);
 
-  Task<object?> ReadData(DatabaseData database, string table, int id);
+  Task<object> ReadDataAsync(DatabaseData database, int id, IDbConnection? connection, 
+    IDbTransaction? transaction, CancellationToken cancellationToken);
 
-  Task PreparePreviousResultTable(IDbConnection connection, ResultSet? previousResults);
+  Task PreparePreviousResultTable(SearchTree searchTree);
 
-  Task DropPreviousResultTable(IDbConnection connection, ResultSet? previousResults);
+  Task DropPreviousResultTable(SearchTree searchTree);
 
-  Task<ResultSet> FindLinkedRecordSet(IDbConnection connection, FieldData fieldData, string? value, DatasetFilter? filter, ResultSet? previousResults);
+  Task<ResultSet> FindLinkedRecordSetAsync(SearchTree searchTree, SearchTreeLeaf leaf);
 
-  Task<ResultSet> FindIndexedRecordSet(IDbCommand command, DatabaseData databaseData, FieldData fieldData, IndexTypeEnum type, string tableName,
-                                       string? language, SearchOperators searchOperator, string? value, DatasetFilter? filter,
-                                       ResultSet? previousResults);
+  Task<ResultSet> FindFlatIndexedRecordSetAsync(IDbCommand command, SearchTree searchTree, SearchTreeLeaf leaf);
 
-  Task<ResultSet> ReadAllRecords(IDbCommand command, DatabaseData databaseData, DatasetFilter? filter, ResultSet? previousResults);
+  Task<ResultSet> ReadAllRecordsAsync(IDbCommand command, SearchTree searchTree);
 
-  Task<AutoCompleteResult?> GetAutoComplete(IEnumerable<FieldData> fieldData, DatasetFilter? datasetFilter, string? value, int? starFrom, int? limit, string? language, bool count);
+  Task<AutoCompleteResult?> GetAutoCompleteAsync(IEnumerable<FieldData> fieldData, DatasetFilter? datasetFilter, string? value,
+                                            int? starFrom, int? limit, string? language, bool count, CancellationToken cancellationToken);
 
-  Task<int> GetNewRecordId(DatabaseData database, DatasetData? dataset);
+  Task<int> GetNewRecordIdAsync(IDbConnection connection, IDbTransaction transaction, DatabaseData database, DatasetData? dataset);
 
-  Task WriteNewData(string table, int id, DateTime creation, DateTime modification, string data);
+  Task WriteNewDataAsync(string table, int id,
+                         DateTime creation, DateTime modification, string data,
+                         IDbConnection connection,
+                         IDbTransaction transaction,
+                         CancellationToken cancellationToken);
+     
+  Task UpdateDataAsync(IDbConnection connection, IDbTransaction transaction, string table, int id,
+                  DateTime modification, string data, CancellationToken cancellationToken);
 
-  Task UpdateData(string table, int id, DateTime modification, string data);
+  Task<IDbTransaction> StartTransactionAsync(IDbConnection connection);
 
-  void StartTransaction(DatabaseData databaseData);
+  Task RollbackAsync(IDbTransaction transaction, CancellationToken cancellationToken);
 
-  void Rollback();
+  Task CommitAsync(IDbTransaction transaction, CancellationToken cancellationToken);
 
-  void Commit();
+  Task<IDbConnection> GetDbConnectionAsync(DatabaseData database);
 
-  IDbConnection GetDbConnection(DatabaseData database);
+  Task<int> AddIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, IntegerIndexRow row, CancellationToken cancellationToken);
 
-  Task AddIndexKey(string table, int key, int id);
+  Task<int> DeleteIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, IntegerIndexRow row, CancellationToken cancellationToken);
 
-  Task RemoveIndexKey(string table, int key, int id);
+  Task<int> AddIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, string? fullTextTable, TermIndexRow row, CancellationToken cancellationToken);
 
-  Task RemoveIndexKey(string table, string term, string displayTerm, string language, string? domain, int id);
+  Task<int> DeleteIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, string? fullTextTable, TermIndexRow row, CancellationToken cancellationToken);
 
-  Task AddIndexKey(string table, string key, string displayTerm, string language, string? domain, int id);
+  Task<int> DeleteIndexKeysAsync(IDbConnection connection, IDbTransaction transaction, string tableName, int id, CancellationToken cancellationToken);
+
+  Task<List<int>> ReadLinkedRecordIdsAsync(IDbConnection connection, IDbTransaction transaction, string table, int id, CancellationToken cancellationToken);
+
+  Task<int> AddIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, DateIndexRow dateRow, CancellationToken cancellationToken);
+
+  Task<int> DeleteIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, DateIndexRow dateRow, CancellationToken cancellationToken);
+
+  Task<int> AddIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, IsoDateIndexRow dateRow, CancellationToken cancellationToken);
+
+  Task<int> DeleteIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, IsoDateIndexRow dateRow, CancellationToken cancellationToken);
+
+  Task<int> AddIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, BooleanIndexRow booleanRow, CancellationToken cancellationToken);
+
+  Task<int> DeleteIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, BooleanIndexRow booleanRow, CancellationToken cancellationToken);
+
+  Task<int> AddIndexKey(IDbConnection connection, IDbTransaction transaction, string? fullTextTable, AlphaNumericIndexRow alphaNumericRow, CancellationToken cancellationToken);
+
+  Task<int> DeleteIndexKey(IDbConnection connection, IDbTransaction transaction, string? fullTextTable, AlphaNumericIndexRow alphaNumericRow, CancellationToken cancellationToken);
+
+  Task<int> WriteRecordSetAsync(string folder, RecordSetMetaData metaData, ResultSet set, CancellationToken cancellationToken);
+
+  Task DeleteRecordSetAsync(string folder, string database, int setNo, CancellationToken cancellationToken);
+  Task<List<HierarchyNode>> SearchLocationsAsync(DatabaseData locations, string nameField, string barcodeField, string value, SearchLimits limits);
+  Task<IEnumerable<int>> SearchLinksAsync(DatabaseData database, DatasetData dataset, FieldData field, string searchValue, string domain, SearchLimits limits);
+  Task<string> GetAutoNumberValue(IDbConnection connection, IDbTransaction transaction, FieldData fieldData, CancellationToken cancellationToken);
 }

@@ -1,4 +1,4 @@
-﻿namespace DDigit.PowerShell;
+﻿namespace DDigit.Scripting;
 
 /// <summary>
 /// Create a new record
@@ -10,16 +10,16 @@ public class NewAdlibRecord : DDCmdlet
   /// The database to retrieve the record from
   /// </summary>
   [Parameter(Mandatory = true)]
-  public string? Database
+  public required string Database
   {
     get; set;
   }
 
   [Parameter]
-  public string? Dataset 
-  { 
+  public string? Dataset
+  {
     get;
-    set; 
+    set;
   }
 
   /// <summary>
@@ -37,7 +37,7 @@ public class NewAdlibRecord : DDCmdlet
     }
   }
 
-  public Record? New()
+  public Record New()
   {
     if (Database == null)
     {

@@ -1,4 +1,4 @@
-﻿namespace DDigit.PowerShell;
+﻿namespace DDigit.Scripting;
 
 [Cmdlet(VerbsCommon.Get, AdlibNouns.Autocomplete)]
 public class GetAdlibAutoComplete : DDCmdlet
@@ -7,7 +7,7 @@ public class GetAdlibAutoComplete : DDCmdlet
   /// The database for which to get suggestions
   /// </summary>
   [Parameter(Mandatory = true)]
-  public string? Database
+  public required string Database
   {
     get; set;
   }
@@ -25,7 +25,7 @@ public class GetAdlibAutoComplete : DDCmdlet
   /// The field for which to get the suggestions
   /// </summary>
   [Parameter(Mandatory = true)]
-  public string[]? Field
+  public required string[] Field
   {
     get; set;
   }
@@ -69,13 +69,13 @@ public class GetAdlibAutoComplete : DDCmdlet
     get; set;
   } = true;
 
-  public new AutoCompleteResult? Result { get; private set; } 
+  public new AutoCompleteResult? Result { get; private set; }
 
   protected override void ProcessRecord()
   {
     async Task AutoComplete()
     {
-      Result = await provider.GetAutoComplete(WorkingDirectory, Database!, Dataset, Field!, Value, StartFrom, Limit, Language, Count);
+      Result = await provider.GetAutoComplete(WorkingDirectory, Database!, Dataset, Field!, Value, StartFrom, Limit, Language, Count, CancellationToken.None);
     }
 
     RunAsyncTask(AutoComplete);

@@ -2,13 +2,18 @@
 
 public partial class DDataProvider : IDataProvider
 {
-  public async Task<ResultSet> GetRecordSet(string folder, string database, int set)
-    => await GetRecordSet(MetaDataCache.ReadDatabase(folder, database, false) ??
-                        throw new DatabaseNotFoundException(folder, database), set);
+  public async Task<ResultSet> GetRecordSetAsync(string folder, string database, int set, CancellationToken cancellationToken)
+    => await GetRecordSetAsync(MetaDataCache.ReadDatabase(folder, database, false) ??
+                        throw new DatabaseNotFoundException(folder, database), set, cancellationToken);
 
-  public async Task<ResultSet> GetRecordSet(DatabaseData databaseData, int set)
+  private async Task<ResultSet> GetRecordSetAsync(DatabaseData databaseData, int set, CancellationToken cancellationToken)
   {
-    var result = await Repository.GetResultSet(databaseData, set, null, null);
+    var searchTree = new SearchTree
+    {
+      Database = databaseData,
+      Cancellation = cancellationToken,
+    };
+    var result = await Repository.GetResultSetAsync(searchTree, set);
     result.WorkingDirectory = Path.GetDirectoryName(databaseData.PhysicalPath);
     return result;
   }

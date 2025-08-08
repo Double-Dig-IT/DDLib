@@ -1,4 +1,4 @@
-﻿namespace DDigit.PowerShell;
+﻿namespace DDigit.Scripting;
 
 [Cmdlet(VerbsCommon.Get, "AdlibMergedField")]
 public class GetAdlibMergedField : DDCmdlet

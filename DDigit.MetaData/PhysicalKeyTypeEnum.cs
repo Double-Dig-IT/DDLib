@@ -1,6 +1,6 @@
 ﻿namespace DDigit.MetaData;
 
-public enum PhysicalKeyTypeEnum
+public enum PhysicalKeyTypeEnum : short
 {
   Ascii = 0,
   Int32 = 1,

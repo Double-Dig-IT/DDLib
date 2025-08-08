@@ -1,9 +1,20 @@
 ﻿
 
+
 namespace DDigit.Data;
 
 public class OccurrenceList : List<Occurrence>
 {
+  internal OccurrenceList Clone()
+  {
+    OccurrenceList occurrenceList = [];
+    foreach (var occurrence in this)
+    {
+      occurrenceList.Add(occurrence.Clone());
+    }
+    return occurrenceList;
+  }
+
   internal void Delete(int occ)
   {
     if (occ < 1)
@@ -17,7 +28,7 @@ public class OccurrenceList : List<Occurrence>
     }
   }
 
-  internal Occurrence FindOrCreate(int occ)
+  internal Occurrence FindOrCreate(OccurrenceDataTypeEnum dataType, int occ)
   {
     if (occ < 1)
     {
@@ -26,12 +37,12 @@ public class OccurrenceList : List<Occurrence>
     int index = occ - 1;
     while (Count < occ)
     {
-      Add(new Occurrence());
+      Add(new Occurrence(dataType));
     }
     return this[index];
   }
 
-  internal Occurrence InsertOrCreate(int occ)
+  internal Occurrence InsertOrCreate(OccurrenceDataTypeEnum dataType, int occ)
   {
     if (occ < 1)
     {
@@ -42,13 +53,15 @@ public class OccurrenceList : List<Occurrence>
     {
       while (Count < occ)
       {
-        Add(new Occurrence());
+        Add(new Occurrence(dataType));
       }
     }
     else
     {
-      Insert(index, new Occurrence());
+      Insert(index, new Occurrence(dataType));
     }
     return this[index];
   }
+
+  internal string? GetData(int occ) => occ > 0 && occ <= Count ? this[occ - 1].GetData() : null;
 }

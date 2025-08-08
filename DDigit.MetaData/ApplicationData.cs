@@ -1,8 +1,10 @@
-﻿namespace DDigit.MetaData;
+﻿using System.Management.Automation;
 
-public class ApplicationData: FileData
+namespace DDigit.MetaData;
+
+public class ApplicationData : FileData, IFileData
 {
-  public ApplicationData(string fileName, bool trace) : base (ObjectTypeEnum.Application, fileName, trace)
+  public ApplicationData(string fileName, bool trace = false) : base(ObjectTypeEnum.Application, fileName, trace)
   {
   }
 
@@ -18,17 +20,18 @@ public class ApplicationData: FileData
 
   private Encoding encoding = Encoding.UTF8;
 
-  protected override void Decode(Stream stream, bool trace)
+  protected override void Decode(Stream stream, bool trace = false)
   {
     DataSourceData? dataSource = null;
     MethodData? method = null;
-    IHasScreens? parent = null;
+    IHasScreens? screenDestination = null;
     JobData? job = null;
     TaskData? task = null;
     FieldData? field = null;
     FriendlyDatabaseData? friendlyDatabase = null;
     EnumerationValueData? enumerationValue = null;
     ConnectEntityData? connectEntity = null;
+    ApplicationFeatureData? applicationFeature = null;
 
     Magic = stream.ReadInt16();
 
@@ -45,6 +48,15 @@ public class ApplicationData: FileData
       var objectType = (ObjectTypeEnum)stream.ReadEnum(typeof(ObjectTypeEnum));
       try
       {
+        // Before anything else:
+        // Figure out where screens need to be attached. 
+        // Method screens immediately follow the screen object.
+        // Anything else resets the destination to datasource
+        if (objectType != ObjectTypeEnum.Screen)
+        {
+          screenDestination = dataSource;
+        }
+
         switch (objectType)
         {
           case ObjectTypeEnum.Application:
@@ -65,11 +77,11 @@ public class ApplicationData: FileData
             break;
 
           case ObjectTypeEnum.DataSource:
-            parent = dataSource = new DataSourceData(objectType, stream, encoding, FileName, trace);
+            screenDestination = dataSource = new DataSourceData(objectType, stream, encoding, FileName, trace);
             DataSources.Add(dataSource);
             break;
 
-          case ObjectTypeEnum.DataSourceRights:
+          case ObjectTypeEnum.DataSourceAccessRights:
             dataSource?.AccessRights.Add(new AccessRightsData(objectType, stream, encoding, FileName, trace));
             break;
 
@@ -102,11 +114,12 @@ public class ApplicationData: FileData
             break;
 
           case ObjectTypeEnum.Screen:
-            parent?.Screens.Add(new LanguageTextData(objectType, stream, encoding, FileName, trace));
+            var text = new LanguageTextData(objectType, stream, encoding, FileName, trace);
+            screenDestination?.Screens.Add(text);
             break;
 
           case ObjectTypeEnum.Method:
-            parent = method = new MethodData(objectType, stream, encoding, FileName, trace);
+            screenDestination = method = new MethodData(objectType, stream, encoding, FileName, trace);
             dataSource?.Methods.Add(method);
             break;
 
@@ -128,15 +141,15 @@ public class ApplicationData: FileData
             dataSource?.Add(outputJob);
             break;
 
-          case ObjectTypeEnum.OutputJobTitle:
+          case ObjectTypeEnum.JobTitle:
             job?.Texts.Add(new LanguageTextData(objectType, stream, encoding, FileName, trace));
             break;
 
-          case ObjectTypeEnum.OutputJobDescription:
+          case ObjectTypeEnum.JobDescription:
             job?.Descriptions.Add(new LanguageTextData(objectType, stream, encoding, FileName, trace));
             break;
 
-          case ObjectTypeEnum.OutputJobRights:
+          case ObjectTypeEnum.JobAccessRights:
             job?.AccessRights.Add(new AccessRightsData(objectType, stream, encoding, FileName, trace));
             break;
 
@@ -215,6 +228,15 @@ public class ApplicationData: FileData
             FacsList.Add(new FacsData(objectType, stream, encoding, FileName, trace));
             break;
 
+          case ObjectTypeEnum.ApplicationFeature:
+            applicationFeature = new ApplicationFeatureData(objectType, stream, encoding, FileName, trace);
+            ApplicationFeatures.Add(applicationFeature);
+            break;
+
+          case ObjectTypeEnum.ApplicationFeatureRole:
+            applicationFeature?.AccessRights.Add(new AccessRightsData(objectType, stream, encoding, FileName, trace));
+            break;
+
           default:
             throw new InvalidDataException($"Invalid object type '{objectType}' in '{FileName}' location {stream.Position:n0}");
         }
@@ -235,7 +257,7 @@ public class ApplicationData: FileData
   /// </summary>
   public string? Name
   {
-    get; private set;
+    get; set;
   }
 
   /// <summary>
@@ -244,7 +266,7 @@ public class ApplicationData: FileData
   public List<DataSourceData> DataSources
   {
     get;
-    private set;
+    set;
   } = [];
 
   /// <summary>
@@ -280,6 +302,12 @@ public class ApplicationData: FileData
     private set;
   } = [];
 
+  public List<ApplicationFeatureData> ApplicationFeatures
+  {
+    get;
+    private set;
+  } = [];
+
   internal static PropertyList Properties =
   [
     new PropertyMap (0, DataTypesEnum.Int16,  "ElementCount"),
@@ -298,6 +326,7 @@ public class ApplicationData: FileData
       (LanguageTextData.Properties, Titles),
       (UserData.Properties, Users),
       (ApplicationSettingData.Properties, new ApplicationSettingData[]{Settings!}), // the settings are not a list, but stick it in an array to conform to the writer's expectation
+      (ApplicationFeatureData.Properties, ApplicationFeatures)
    ];
 
 
@@ -311,7 +340,11 @@ public class ApplicationData: FileData
   /// Save the object to Json
   /// </summary>
   /// <param name="fileName"></param>
-  public void SaveToJson(string fileName) => File.WriteAllText(fileName, JsonSerializer.Serialize(this, options));
+  public void SaveToJson(string fileName)
+    => File.WriteAllText(fileName, Utilities.JsonSerializer.Serialize(this, options));
 
-  public override string Extension => ".pbk";
+  public static string Extension => ".pbk";
+
+  [JsonIgnore]
+  public string? Title => Titles.Count > 0 ? Titles[0].Text : null;
 }

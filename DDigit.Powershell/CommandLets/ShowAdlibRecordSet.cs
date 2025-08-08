@@ -1,4 +1,6 @@
-﻿namespace DDigit.PowerShell;
+﻿using DDigit.Search;
+
+namespace DDigit.Scripting;
 
 /// <summary>
 /// Show the fields of a set of records
@@ -36,7 +38,7 @@ public class ShowAdlibRecordSet : DDCmdlet
   /// <summary>
   /// A list of fields to show
   /// </summary>
-  
+
   [Parameter]
   [Alias(["Fields"])]
   public string[]? Field
@@ -74,7 +76,7 @@ public class ShowAdlibRecordSet : DDCmdlet
             continue;
           }
         }
-        var record = await provider.ReadRecord(folder, database, hit);
+        var record = await provider.ReadRecordAsync(folder, database, hit, CancellationToken.None);
         OutputRecord(record);
         written++;
         if (Limit > 0 && written == Limit)
@@ -94,7 +96,7 @@ public class ShowAdlibRecordSet : DDCmdlet
       {
         if (field != null)
         {
-          responseObject.Members.Add(new PSNoteProperty(field, record.GetDataAsync(field, 1, Language)?.ToString()));
+          responseObject.Members.Add(new PSNoteProperty(field, record.GetAsync(field, 1, Language, null, null, default)));
         }
       }
       if (SessionState != null)

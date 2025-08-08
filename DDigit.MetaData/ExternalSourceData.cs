@@ -1,6 +1,6 @@
 ﻿namespace DDigit.MetaData;
 
-public class ExternalSourceData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace) : 
+public class ExternalSourceData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace) :
   BaseData(objectType, stream, encoding, fileName, Properties, trace)
 {
 
@@ -47,19 +47,30 @@ public class ExternalSourceData(ObjectTypeEnum objectType, Stream stream, Encodi
     internal set;
   }
 
+  
   /// <summary>
-  /// The field name.
+  /// The name the external source.
   /// </summary>
   public string? Name
   {
-    get;
-    internal set;
+    get => Names[0].Text;
+    set
+    {
+      if (Names.Count > 0)
+      {
+        Names[0].Text = value;
+      }
+      else
+      {
+        Names.Add(new LanguageTextData(ObjectTypeEnum.ExternalSourceName, value));
+      }
+    }
   }
 
   /// <summary>
   /// A list with all external source names.
   /// </summary>
-  public List<LanguageTextData> Names
+  public TextsList Names
   {
     get;
     internal set;

@@ -2,10 +2,22 @@
 
 public class FieldData : FieldDData
 {
-  public FieldData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace, DatabaseData? database = null) : 
-    base (objectType, stream, encoding, fileName, Properties, trace)
+  public FieldData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace, DatabaseData? database = null) :
+    base(objectType, stream, encoding, fileName, Properties, trace)
   {
-    Database = database;
+    // The field object is also used in tasks in applications
+    // In this situation there is no database, so we cannot check if the field is a LinkRef
+    // We need to check the database here to prevent crashes when reading an adlib.pbk object. 
+    if (database != null)
+    {
+      this.database = database;
+      if (IsLinkRef && Type != FieldTypeEnum.Integer)
+      {
+        Type = FieldTypeEnum.Integer; // fix this problem in the setup, do not throw an exception
+        Console.WriteLine($"Warning: Link reference fields must be of type integer, '{database.Name}', '{Name} ({Tag})'");
+        //throw new DDException($"Link reference fields must be of type integer, '{database!.Name}', '{Tag}'");
+      }
+    }
   }
 
   internal FieldData()
@@ -13,167 +25,199 @@ public class FieldData : FieldDData
 
   }
 
+  private DatabaseData? database;
   [JsonIgnore]
-  public DatabaseData? Database { get; internal set; }
+  public DatabaseData Database
+  {
+    get
+    {
+      if (database == null)
+      {
+        throw new NullReferenceException(nameof(database));
+      }
+      return database;
+    }
+    internal set => database = value;
+  }
 
   /// <summary>
   /// The group to which this field belongs.
   /// </summary>
-  public string? Group
+  public string Group
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// The path of the linked database.
   /// </summary>
-  public string? LinkedDatabasePath
+  public string LinkedDatabasePath
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// Use strict validation for links, (the default is true).
   /// </summary>
-  public bool? StrictValidation
+  public bool StrictValidation
   {
-    get; private set;
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// The link reference tag.
   /// </summary>
-  public string? LinkIndexTag
+  public string LinkIndexTag
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// The link reference tag.
   /// </summary>
-  public string? LinkIdTag
+  public string LinkIdTag
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// The reverse link reference tag.
   /// </summary>
-  public string? LinkReverseTag
+  public string LinkReverseTag
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// Is forcing allowed, (the default is true).
   /// </summary>
-  public bool? ForcingAllowed
+  public bool ForcingAllowed
   {
-    get; private set;
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// The preferred tag.
   /// </summary>
-  public string? PreferredTag
+  public string PreferredTag
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// The equivalent term tag.
   /// </summary>
-  public string? EquivalentTag
+  public string EquivalentTag
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// The narrower term tag.
   /// </summary>
-  public string? NarrowerTag
+  public string NarrowerTag
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// The narrower tag.
   /// </summary>
   public string? BroaderTag
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// The semantic factor tag.
   /// </summary>
   public string? SemanticFactorTag
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// TDo we merge in multiple occurrences?
   /// </summary>
   public bool MultiOccurrenceLink
   {
-    get; private set;
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// The link screen.
   /// </summary>
-  public string? LinkScreen
+  public string LinkScreen
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// The zoom screen.
   /// </summary>
-  public string? ZoomScreen
+  public string ZoomScreen
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// The edit screen.
   /// </summary>
-  public string? EditScreen
+  public string EditScreen
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// The search screen.
   /// </summary>
-  public string? SearchScreen
+  public string SearchScreen
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// The filter Adapl.
   /// </summary>
-  public string? FilterAdapl
+  public string FilterAdapl
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// The command Adapl.
   /// </summary>
-  public string? CommandAdapl
+  public string CommandAdapl
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// The field length.
   /// </summary>
-  public short? Length
+  public short Length
   {
-    get; private set;
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
@@ -181,7 +225,8 @@ public class FieldData : FieldDData
   /// </summary>
   public FieldTypeEnum Type
   {
-    get; private set;
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
@@ -189,159 +234,179 @@ public class FieldData : FieldDData
   /// </summary>
   public LinkTypeEnum LinkType
   {
-    get; private set;
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// The tag which contains the dataset to force new records in.
   /// </summary>
-  public string? ForceInDatasetTag
+  public string ForceInDatasetTag
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// Is this an enumerative field?
   /// </summary>
-  public bool? IsEnumeration
+  public bool Enumeration
   {
-    get; private set;
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// The link domain for this link.
   /// </summary>
-  public string? LinkDomain
+  public string LinkDomain
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// Z39.50 use attribute (only useful in Z39.50 servers).
   /// </summary>
-  internal short? Z3950UseAttribute
+  internal short Z3950UseAttribute
   {
-    get; private set;
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// Z39.50 GRS (General Record Structure 1) path (only useful in Z39.50 servers).
   /// </summary>
-  internal string? Z3950Grs1TagPath
+  internal string Z3950Grs1TagPath
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// Z39.50 Marc (Machine readable catalog) tag (only useful in Z39.50 servers).
   /// </summary>
-  internal string? MarcTag
+  internal string MarcTag
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// Z39.50 SGML (Standard Generalized Markup Language) tag (only useful in Z39.50 servers).
   /// </summary>
-  internal string? SGMLTag
+  internal string SGMLTag
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// Z39.50 tag set (only useful in Z39.50 servers).
   /// </summary>
-  internal short? Z3950TagSet
+  internal short Z3950TagSet
   {
-    get; private set;
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// The tag that stores the link domain in case of dynamic domains.
   /// </summary>
-  public string? LinkDomainTag
+  public string LinkDomainTag
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// How defaults are assigned.
   /// </summary>
   public DefaultTypeEnum DefaultType
   {
-    get; private set;
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// The tag that stores the enumeration values in case of dynamic enumerations.
   /// </summary>
-  public string? EnumerationSourceTag
+  public string EnumerationSourceTag
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// The prefix string for autonumbering fields.
   /// </summary>
-  public string? AutoNumberPrefix
+  public string AutoNumberPrefix
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// The starting value for autonumbering fields.
   /// </summary>
-  public int? AutoNumberStartValue
+  public int AutoNumberStartValue
   {
-    get; private set;
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// The increment value for autonumbering fields.
   /// </summary>
-  public int? AutoNumberIncrement
+  public int AutoNumberIncrement
   {
-    get; private set;
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// The 16 bits starting value for autonumbering fields (obsolete).
   /// </summary>
-  internal short? AutoNumber16StartValue
+  internal short AutoNumber16StartValue
   {
-    get; private set;
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// The 16 bits increment value for autonumbering fields (obsolete)
   /// </summary>
-  internal short? AutoNumber16Increment
+  internal short AutoNumber16Increment
   {
-    get; private set;
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// The suffix string for autonumbering fields.
   /// </summary>
-  public string? AutoNumberSuffix
+  public string AutoNumberSuffix
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// The format string to apply on autonumbering fields.
   /// </summary>
-  public string? AutoNumberFormatString
+  public string AutoNumberFormatString
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// When are automatic numbers assigned?
   /// </summary>
   public AutoNumberAssignmentEnum AutoNumberAssignment
   {
-    get; private set;
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
@@ -349,7 +414,8 @@ public class FieldData : FieldDData
   /// </summary>
   public AutoNumberAssignmentSourceEnum AutoNumberAssignmentSource
   {
-    get; private set;
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
@@ -357,7 +423,8 @@ public class FieldData : FieldDData
   /// </summary>
   public ExchangeableEnum IsExchangeable
   {
-    get; private set;
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
@@ -365,7 +432,8 @@ public class FieldData : FieldDData
   /// </summary>
   public SortOrderEnum SortOrder
   {
-    get; private set;
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
@@ -373,23 +441,26 @@ public class FieldData : FieldDData
   /// </summary>
   public EnumerationSortOrderEnum EnumerationSortOrder
   {
-    get; private set;
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// The format string of this field.
   /// </summary>
-  public string? FormatString
+  public string FormatString
   {
-    get; private set;
-  }
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// The storage type of this field.
   /// </summary>
   public StorageTypeEnum StorageType
   {
-    get; private set;
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
@@ -397,107 +468,107 @@ public class FieldData : FieldDData
   /// </summary>
   public bool IsMultiLingual
   {
-    get; private set;
+    get; set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// Do not use this field in lists.
   /// </summary>
-  public bool? DoNotShowInLists
+  public bool DoNotShowInLists
   {
     get;
-    private set;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// Presentation format.. how does this work?
   /// </summary>
-  public int? PresentationFormat
+  public int PresentationFormat
   {
     get;
-    private set;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// Retrieval path.
   /// </summary>
-  public string? RetrievalPath
+  public string RetrievalPath
   {
     get;
-    private set;
-  }
+    set;
+  } = string.Empty;
 
   /// <summary>
   /// Thumbnail retrieval path.
   /// </summary>
-  public string? ThumbnailRetrievalPath
+  public string ThumbnailRetrievalPath
   {
     get;
-    private set;
-  }
+    set;
+  } = string.Empty;
 
   /// <summary>
   /// Range start tag
   /// </summary>
-  public string? RangeStartTag
+  public string RangeStartTag
   {
     get;
-    private set;
-  }
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// Range start tag
   /// </summary>
-  public string? RangeEndTag
+  public string RangeEndTag
   {
     get;
-    private set;
-  }
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// Exclude this field from the full text index.
   /// </summary>
-  public bool? ExcludeFromFullTextIndex
+  public bool ExcludeFromFullTextIndex
   {
     get;
-    private set;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// Context tag.
   /// </summary>
-  public string? ContextTag
+  public string ContextTag
   {
     get;
-    private set;
-  }
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
-  /// Context tag.
+  /// Can we use a link screen here?
   /// </summary>
-  public bool? DoNotUseLinkScreen
+  public bool DoNotUseLinkScreen
   {
     get;
-    private set;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// In point tag.
   /// </summary>
-  public string? InPointTag
+  public string InPointTag
   {
     get;
-    private set;
-  }
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// Out point tag.
   /// </summary>
-  public string? OutPointTag
+  public string OutPointTag
   {
     get;
-    private set;
-  }
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// Media storage type.
@@ -505,7 +576,7 @@ public class FieldData : FieldDData
   public MediaStorageTypeEnum MediaStorageType
   {
     get;
-    private set;
+    set;
   }
 
   /// <summary>
@@ -514,98 +585,98 @@ public class FieldData : FieldDData
   public MediaRetrievalTypeEnum MediaRetrievalType
   {
     get;
-    private set;
+    set;
   }
 
   /// <summary>
   /// Detail screen for this field.
   /// </summary>
-  public string? DetailScreen
+  public string DetailScreen
   {
     get;
-    private set;
-  }
+    set;
+  } = string.Empty;
 
   /// <summary>
   /// The tag for related fields.
   /// </summary>
-  public string? RelatedTag
+  public string RelatedTag
   {
     get;
-    private set;
-  }
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// Some feature for Calm
   /// </summary>
-  internal short? CALMExclusiveEnumeration
+  internal short CALMExclusiveEnumeration
   {
     get;
-    private set;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// Is this field inheritable?
   /// </summary>
-  public bool? IsInheritable
+  public bool IsInheritable
   {
     get;
-    private set;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// Relation format string (used in Axiell Collections to format the relations view).
   /// </summary>
-  public string? RelationFormatString
+  public string RelationFormatString
   {
     get;
-    private set;
-  }
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// Developer notes for the field
   /// </summary>
-  public string? Notes
+  public string Notes
   {
     get;
-    private set;
-  }
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// Merge grouped Metadata?
   /// </summary>
-  public bool? MergeGroupedMetaData
+  public bool MergeGroupedMetaData
   {
     get;
-    private set;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// Pseudonym for tag
   /// </summary>
-  public string? PseudonymForTag
+  public string PseudonymForTag
   {
     get;
-    private set;
-  }
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// Pseudonym tag
   /// </summary>
-  public string? PseudonymTag
+  public string PseudonymTag
   {
     get;
-    private set;
-  }
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// Format string for summaries
   /// </summary>
-  public string? SummaryFormatString
+  public string SummaryFormatString
   {
     get;
-    private set;
-  }
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// You can only write once to this field, no updates possible
@@ -613,35 +684,35 @@ public class FieldData : FieldDData
   public bool WriteOnce
   {
     get;
-    private set;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// The path of the metadata database.
   /// </summary>
-  public string? MetadataDatabasePath
+  public string MetadataDatabasePath
   {
     get;
-    private set;
-  }
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// The metadata database reference tag.
   /// </summary>
-  public string? MetadataReferenceTag
+  public string MetadataReferenceTag
   {
     get;
-    private set;
-  }
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// The tag of the field that contains the URI for linked data.
   /// </summary>
-  public string? LinkedURITag
+  public string LinkedURITag
   {
     get;
-    private set;
-  }
+    set;
+  } = string.Empty;
 
   /// <summary>
   /// The Linked Open Data type, Internal = data is in our system, External means that it needs to be resolved through an URI.
@@ -649,16 +720,17 @@ public class FieldData : FieldDData
   public LODTypeEnum LODType
   {
     get;
-    private set;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
+  /// t
   /// Disable download for this field (LOD related?)
   /// </summary>
   public bool DisableDownload
   {
     get;
-    private set;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
@@ -667,7 +739,7 @@ public class FieldData : FieldDData
   public int NumberOfDecimalPlaces
   {
     get;
-    private set;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
@@ -676,26 +748,26 @@ public class FieldData : FieldDData
   public bool ZeroPadding
   {
     get;
-    private set;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// Should this link (LOD related) be indexed?
   /// </summary>
-  public bool IndexedLink
+  public bool IsIndexedLink
   {
     get;
-    private set;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// Sort field for the indexed link (LOD related).
   /// </summary>
-  public string? IndexedLinkSortField
+  public string IndexedLinkSortField
   {
     get;
-    private set;
-  }
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// How should indexed links (LOD related) be sorted.
@@ -703,44 +775,44 @@ public class FieldData : FieldDData
   public SortSequenceEnum IndexedLinkSortOrder
   {
     get;
-    private set;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// How should indexed links (LOD related) be formatted.
   /// </summary>
-  public string? IndexedLinkFormatString
+  public string IndexedLinkFormatString
   {
     get;
-    private set;
-  }
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// Download path
   /// </summary>
-  public string? DownloadPath
+  public string DownloadPath
   {
     get;
-    private set;
-  }
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// The tag of the field that contains the original file name
   /// </summary>
-  public string? OriginalFileNameTag
+  public string OriginalFileNameTag
   {
     get;
-    private set;
-  }
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// The tag of the field that contains the media type
   /// </summary>
-  public string? MediaTypeTag
+  public string MediaTypeTag
   {
     get;
-    private set;
-  }
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// The type of enumeration for this field.
@@ -748,26 +820,26 @@ public class FieldData : FieldDData
   public EnumerationTypeEnum EnumerationType
   {
     get;
-    private set;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
   /// Huh?
   /// </summary>
-  public string? DisableDownloadCondition
+  public string DisableDownloadCondition
   {
     get;
-    private set;
-  }
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// Huh 2?
   /// </summary>
-  public string? DefaultLinkFilter
+  public string DefaultLinkFilter
   {
     get;
-    private set;
-  }
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  } = string.Empty;
 
   /// <summary>
   /// A list with defaults
@@ -835,7 +907,7 @@ public class FieldData : FieldDData
   /// <summary>
   /// A list of record type roles
   /// </summary>
-  public List<EnumerationValueData> EnumerationValues
+  public EnumerationValueList EnumerationValues
   {
     get;
     internal set;
@@ -894,6 +966,11 @@ public class FieldData : FieldDData
     get; private set;
   } = [];
 
+  public List<MetadataMappingData> MetadataMappings
+  {
+    get; private set;
+  } = [];
+
   internal void Add(EnumerationValueData enumerationValueData) => EnumerationValues.Add(enumerationValueData);
 
   internal void Add(LanguageTextData languageTextData) => Names.Add(languageTextData);
@@ -912,7 +989,7 @@ public class FieldData : FieldDData
     }
 
     int languageNo = Languages.GetAdlibNo(language);
-    
+
     if (languageNo > enumValue.Texts.Count - 1)
     {
       throw new LanguageIsNotSupportedException(language);
@@ -932,9 +1009,7 @@ public class FieldData : FieldDData
     if (!string.IsNullOrEmpty(language))
     {
       int languageNo = Languages.GetAdlibNo(language);
-      selection = EnumerationValues.Where(v => v.NeutralValue != null &&
-                                  (value == null || (v.Texts[languageNo].Text != null &&
-                                  v.Texts[languageNo].Text!.StartsWith(value, StringComparison.CurrentCultureIgnoreCase))));
+      selection = EnumerationValues.GetValues(value, languageNo);
     }
     else
     {
@@ -952,9 +1027,87 @@ public class FieldData : FieldDData
   /// <returns>The language specific representation for the neutral value or the neutral value if none was was found</returns>
   public string? GetLanguageEnumValue(string value, string language)
   {
-    var enumValue = EnumerationValues.FirstOrDefault(v => string.Compare(v.NeutralValue, value, StringComparison.CurrentCultureIgnoreCase) == 0);
-    return enumValue != null ? enumValue.Texts[Languages.GetAdlibNo(language)].Text : value;
+    var enumValue = GetEnumerationValues(value);
+    return enumValue != null ? language == "" ? enumValue.NeutralValue : enumValue.Texts[Languages.GetAdlibNo(language)].Text : value;
   }
+
+  public EnumerationValueData GetEnumerationValues(string value, string language = "")
+  {
+    EnumerationValueData? result = null;
+    if (language == "")
+    {
+      result = EnumerationValues.FirstOrDefault(v
+        => string.Compare(v.NeutralValue, value, StringComparison.CurrentCultureIgnoreCase) == 0);
+    }
+    else
+    {
+      int languageIndex = Languages.GetAdlibNo(language);
+
+      result = EnumerationValues.FirstOrDefault(v
+        => string.Compare(v.Texts[languageIndex].Text, value, StringComparison.CurrentCultureIgnoreCase) == 0);
+    }
+    return result ?? throw new EnumValueException(Database.Name!, Name!, Tag!, language, value);
+  }
+
+  public string GetDomainTag()
+  {
+    var linkIndex = PreferredIndex ?? throw new NullReferenceException(nameof(PreferredIndex));
+    return linkIndex.DomainTag ?? throw new NullReferenceException(nameof(linkIndex.DomainTag));
+  }
+
+  /// <summary>
+  /// Get the sql table name for the preferred index of this field.
+  /// </summary>
+  /// <returns>table name</returns>
+  /// <exception cref="NullReferenceException"></exception>
+  public string GetIndexTableName()
+    => PreferredIndex?.TableName ??
+       throw new NullReferenceException(nameof(PreferredIndex)) ??
+       throw new NullReferenceException(nameof(PreferredIndex.TableName));
+
+  private short MaxElementCount(string propertyName)
+     => Math.Max(Properties.GetElementCount(propertyName), ElementCount);
+
+  public FieldData? LinkSourceField(FieldData linkedField)
+  {
+    var mergePair = MergeTags.FirstOrDefault(pair => pair.Destination == linkedField.Tag);
+    return mergePair != null ? LinkedDatabase?.FindFieldByTagOrName(mergePair.Source!) : null;
+  }
+
+  public FieldData GetPartsField()
+  {
+    var relation = Database.InternalLinks.Where(il => il.RelationType == RelationTypeEnum.Hierarchical);
+    if (!relation.Any())
+    {
+      throw new DDException($"Field {this} not found in internal links");
+    }
+    var partsTag = relation.ElementAt(0).NarrowerTermLinkIdTag ?? throw new DDException($"NarrowerTermLinkIdTag not found in internal links");
+    return Database.FindFieldByTagOrName(partsTag) ?? throw new DDException($"Field {partsTag} not found in internal links");
+  }
+
+  public FieldData GetPartsOfField()
+  {
+    var relation = Database.InternalLinks.Where(il => il.RelationType == RelationTypeEnum.Hierarchical);
+    if (!relation.Any())
+    {
+      throw new DDException($"Field {this} not found in internal links");
+    }
+    var partsOfTag = relation.ElementAt(0).BroaderTermLinkIdTag ?? throw new DDException($"BroaderTermLinkIdTag not found in internal links");
+    return Database.FindFieldByTagOrName(partsOfTag) ?? throw new DDException($"Field {partsOfTag} not found in internal links");
+  }
+
+  public static (string root, string? remainder) GetRoot(string fieldNameOrTag)
+  {
+    var index = fieldNameOrTag.IndexOf(IndirectionOperator);
+    return index < 0 ? (fieldNameOrTag, null) : (fieldNameOrTag[..index].Trim(), fieldNameOrTag[(index + 2)..].Trim());
+  }
+
+  public const string IndirectionOperator = "->";
+
+  public const string Identifier = "identifier";
+
+  public static bool IsIdentifier(string fieldNameOrTag) => (fieldNameOrTag == Identifier || fieldNameOrTag == "id" || 
+                                                             fieldNameOrTag == "priref" || fieldNameOrTag == "%0");
 
   internal static PropertyList Properties =
     [
@@ -982,7 +1135,7 @@ public class FieldData : FieldDData
       new PropertyMap(24, DataTypesEnum.String, "SearchScreen"),
       new PropertyMap(25, DataTypesEnum.String, "LinkReverseTag"),
       new PropertyMap(28, DataTypesEnum.String, "BroaderTag"),
-      new PropertyMap(29, DataTypesEnum.Bool, "IsEnumeration"),
+      new PropertyMap(29, DataTypesEnum.Bool, "Enumeration"),
       new PropertyMap(31, DataTypesEnum.String, "LinkDomain"),
       new PropertyMap(32, DataTypesEnum.Int16, "Z3950UseAttribute"),
       new PropertyMap(33, DataTypesEnum.String, "Z3950Grs1TagPath"),
@@ -1042,7 +1195,7 @@ public class FieldData : FieldDData
       new PropertyMap(104, DataTypesEnum.Bool, "DisableDownload"),
       new PropertyMap(105, DataTypesEnum.Int32, "NumberOfDecimalPlaces"),
       new PropertyMap(106, DataTypesEnum.Bool, "ZeroPadding"),
-      new PropertyMap(107, DataTypesEnum.Bool, "IndexedLink"),
+      new PropertyMap(107, DataTypesEnum.Bool, "IsIndexedLink"),
       new PropertyMap(108, DataTypesEnum.String, "IndexedLinkSortField"),
       new PropertyMap(109, DataTypesEnum.Enum, "IndexedLinkSortOrder", typeof(SortSequenceEnum)),
       new PropertyMap(110, DataTypesEnum.String, "IndexedLinkFormatString"),
@@ -1069,36 +1222,41 @@ public class FieldData : FieldDData
       (AccessRightsData.Properties, RecordTypeRoles),
       (LanguageTextData.Properties, RelationTexts),
       (LanguageTextData.Properties, ReverseRelationTexts),
-      (MergeTagData.Properties, MetadataMergeTags)
+      (MergeTagData.Properties, MetadataMergeTags),
+      (MetadataMappingData.Properties, MetadataMappings),
   ];
 
   public bool IsLinked => !string.IsNullOrWhiteSpace(LinkIndexTag) && !string.IsNullOrWhiteSpace(LinkedDatabasePath);
 
-  private bool? isLinkId;
-  private FieldData? linkedField;
+  private bool? isLinkIdField;
   [JsonIgnore]
   public bool IsLinkIdField
   {
     get
     {
-      if (!isLinkId.HasValue)
+      if (!isLinkIdField.HasValue)
       {
         linkedField = Database?.FindFieldByLinkIdTag(Tag!);
-        isLinkId = linkedField != null;
+        isLinkIdField = linkedField != null;
       }
-      return isLinkId.Value;
+      return isLinkIdField.Value;
+    }
+    set
+    {
+      isLinkIdField = value;
     }
   }
 
   [JsonIgnore]
+  private FieldData? linkedField;
   public FieldData? LinkedField
   {
     get
     {
-      if (!isLinkId.HasValue)
+      if (!isLinkIdField.HasValue)
       {
         linkedField = Database?.FindFieldByLinkIdTag(Tag!);
-        isLinkId = linkedField != null;
+        isLinkIdField = linkedField != null;
       }
       return linkedField;
     }
@@ -1116,7 +1274,62 @@ public class FieldData : FieldDData
       }
       return isMergedField.Value;
     }
+    set
+    {
+      isMergedField = value;
+    }
   }
+
+  private bool? isWriteBackField;
+  [JsonIgnore]
+  public bool IsWriteBackField
+  {
+    get
+    {
+      if (!isWriteBackField.HasValue)
+      {
+        isWriteBackField = Database?.FindFieldByWriteBackTag(Tag!) != null;
+      }
+      return isWriteBackField.Value;
+    }
+    set
+    {
+      isWriteBackField = value;
+    }
+  }
+
+  /// <summary>
+  /// If the field is a context field then figure out where is it a context field from.
+  /// </summary>
+  [JsonIgnore]
+  public FieldData? ParentField { get; private set; }
+
+  private bool? isContextField;
+
+  /// <summary>
+  /// True if this is a context field.
+  /// </summary>
+  [JsonIgnore]
+  public bool IsContextField
+  {
+    get
+    {
+      if (!isContextField.HasValue)
+      {
+        ParentField = Database.Fields.FirstOrDefault(f => f.ContextTag == Tag);
+        isContextField = ParentField != null;
+      }
+      return isContextField.Value;
+    }
+  }
+
+  [JsonIgnore]
+  public bool IsReadOnly => IsContextField;
+
+  [JsonIgnore]
+  public bool IsAutoNumberField => AutoNumberAssignment != AutoNumberAssignmentEnum.Undefined &&
+                                   AutoNumberAssignment != AutoNumberAssignmentEnum.Never &&
+                                   (AutoNumberIncrement > 0 || AutoNumber16Increment > 0);
 
   private DatabaseData? linkedDatabase = null;
   [JsonIgnore]
@@ -1211,7 +1424,7 @@ public class FieldData : FieldDData
         var pos = LinkedDatabasePath.IndexOf('>');
         if (pos > 0)
         {
-          linkedDataset = LinkedDatabasePath[pos..];
+          linkedDataset = LinkedDatabasePath[(pos + 1)..];
         }
       }
       return linkedDataset;
@@ -1302,15 +1515,62 @@ public class FieldData : FieldDData
     }
   }
 
+
   /// <summary>
   /// Returns the physical tag that is associated with a field 
   /// (either the linkIdTag, linkIdTag of a linked field associated with a merged in field,
-  ///  or the real Tag)
+  ///  or the real Tag), added support for context fields on 22/03/2025 BDD
   /// </summary>
   [JsonIgnore]
   public string? PhysicalTag
-   => IsLinked ? LinkIdTag :
-      IsMergedField && LinkedFieldData != null && LinkedFieldData.LinkIdTag != null ?
-      LinkedFieldData.LinkIdTag : Tag;
+  {
+    get
+    {
+      if (IsLinked)
+      {
+        return LinkIdTag;
+      }
+      if (IsMergedField && LinkedFieldData != null && LinkedFieldData.LinkIdTag != null)
+      {
+        return LinkedFieldData.LinkIdTag;
+      }
+      if (IsContextField && ParentField != null)
+      {
+        return ParentField.LinkIdTag;
+      }
+      return Tag;
+    }
+  }
 
+
+  private bool? isLinkRef;
+  [JsonIgnore]
+  public bool IsLinkRef
+  {
+    get
+    {
+      isLinkRef ??= Database != null && !string.IsNullOrWhiteSpace(Tag) && Database.FindFieldByLinkIdTag(Tag) != null;
+      return isLinkRef.Value;
+    }
+  }
+
+  public OccurrenceDataTypeEnum OccurrenceDataType
+  {
+    get
+    {
+      if (Enumeration)
+      {
+        return OccurrenceDataTypeEnum.Enumeration;
+      }
+      if (IsLinkIdField)
+      {
+        return OccurrenceDataTypeEnum.LinkRef;
+      }
+      if (IsMultiLingual)
+      {
+        return OccurrenceDataTypeEnum.Multilingual;
+      }
+      return OccurrenceDataTypeEnum.Standard;
+    }
+  }
 }

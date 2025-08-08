@@ -1,6 +1,6 @@
 ﻿namespace DDigit.MetaData;
 
-public enum RelationTypeEnum
+public enum RelationTypeEnum : short
 {
   Undefined = 0,
   Hierarchical = 1,

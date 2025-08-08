@@ -1,6 +1,6 @@
 ﻿namespace DDigit.MetaData;
 
-public enum LinkScopeTypeEnum
+public enum LinkScopeTypeEnum : short
 {
   Undefined = 0,
   Database = 1,

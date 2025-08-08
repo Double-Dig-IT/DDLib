@@ -1,15 +1,22 @@
 ﻿namespace DDigit.MetaData;
 
-public class AccessRightsData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace) : 
-  BaseData(objectType, stream, encoding, fileName, Properties, trace)
+public class AccessRightsData : BaseData
 {
+  public AccessRightsData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace)
+    : base(objectType, stream, encoding, fileName, Properties, trace)
+  {
+  }
+
+  public AccessRightsData(ObjectTypeEnum objectType) : base(objectType, Properties)
+  {
+  }
 
   /// <summary>
   /// The role
   /// </summary>
   public string? Role
   {
-    get; private set;
+    get; set;
   }
 
   /// <summary>
@@ -17,7 +24,7 @@ public class AccessRightsData(ObjectTypeEnum objectType, Stream stream, Encoding
   /// </summary>
   public RightsEnum Rights
   {
-    get; private set;
+    get; set;
   }
 
   public override string ToString() => $"{Role}:{Rights}";

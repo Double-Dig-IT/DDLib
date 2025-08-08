@@ -2,8 +2,8 @@
 
 public abstract class FileData : BaseData
 {
-
-  protected FileData(ObjectTypeEnum objectType, string? fileName, bool trace) : base(objectType, fileName)
+  protected FileData(ObjectTypeEnum objectType, string? fileName, bool trace) :
+    base(objectType, fileName)
   {
     if (fileName != null)
     {
@@ -11,7 +11,16 @@ public abstract class FileData : BaseData
     }
   }
 
-  public void Read(bool trace) => Read(FileName ?? throw new NullReferenceException(nameof(FileName)), trace);
+  protected static string AddExtension(string? fileName, string extension)
+  {
+    if (fileName == null)
+    {
+      throw new NullReferenceException(nameof(fileName));
+    }
+    return fileName.EndsWith(extension, StringComparison.OrdinalIgnoreCase) ? fileName : fileName + extension;
+  }
+
+  public void Read(bool trace = false) => Read(FileName ?? throw new NullReferenceException(nameof(FileName)), trace);
 
   protected void Read(string fileName, bool trace)
   {
@@ -25,9 +34,9 @@ public abstract class FileData : BaseData
     }
 
     DateTimeWritten = fileInfo.LastWriteTime;
-    using var fs = new FileStream(fileInfo.FullName, FileMode.Open, FileAccess.Read);
-    byte[] bytes = new byte[fs.Length];
-    fs.Read(bytes, 0, bytes.Length);
+    using var stream = new FileStream(fileInfo.FullName, FileMode.Open, FileAccess.Read);
+    byte[] bytes = new byte[stream.Length];
+    stream.ReadExactly(bytes);
     using var memoryStream = new MemoryStream(bytes, 0, bytes.Length, false, true);
     Decode(memoryStream, trace);
   }
@@ -70,5 +79,4 @@ public abstract class FileData : BaseData
 
   protected Encoding TextEncoding = Encoding.UTF8;
 
-  public abstract string Extension { get; }
 }

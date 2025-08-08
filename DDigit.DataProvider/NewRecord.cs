@@ -2,5 +2,5 @@
 
 public partial class DDataProvider : IDataProvider
 {
-  public Record NewRecord(string folder, string database, string? dataset) => new(this, folder, database, dataset);
+  public Record NewRecord(string folder, string database, string? dataset = null) => new(this, folder, database, dataset);
 }

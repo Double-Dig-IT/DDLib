@@ -7,3 +7,4 @@ global using DDigit.Search;
 global using DDigit.Utilities;
 
 global using System.Data;
+global using System.Management.Automation.Runspaces;

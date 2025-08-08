@@ -11,7 +11,15 @@ public enum TemplateTypeEnum
   /// </summary>
   Label = 1,
   /// <summary>
-  /// Template for an Ipl printer.
+  /// Raw (used to be Ipl; template for an Ipl printer).
   /// </summary>
-  Ipl = 2
+  Raw = 2,
+  /// <summary>
+  /// Inline.
+  /// </summary>
+  Inline = 3,
+  /// <summary>
+  /// Custom.
+  /// </summary>
+  Custom = 4
 }

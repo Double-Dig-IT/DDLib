@@ -5,7 +5,6 @@ public class UserData : BaseData
   public UserData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace)
     : base(objectType, stream, encoding, fileName, Properties, trace)
   {
-    ElementCount = Properties.Max(property => property.Element);
   }
 
   public UserData() : base(ObjectTypeEnum.User, Properties)
@@ -25,10 +24,10 @@ public class UserData : BaseData
   /// <summary>
   /// Do not expose password outside this module
   /// </summary>
-  internal string Password
+  internal string? Password
   {
     get; private set;
-  } = string.Empty;
+  } 
 
   /// <summary>
   /// Use this function to set the password (write only)

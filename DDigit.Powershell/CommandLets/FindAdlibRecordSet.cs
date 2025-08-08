@@ -1,4 +1,6 @@
-﻿namespace DDigit.PowerShell;
+﻿using DDigit.Search;
+
+namespace DDigit.Scripting;
 
 /// <summary>
 /// Find a set of records based of field and values
@@ -11,7 +13,7 @@ public class FindAdlibRecordSet : DDCmdlet
   /// The database to search in.
   /// </summary>
   [Parameter(Mandatory = true)]
-  public string? Database
+  public required string Database
   {
     get; set;
   }
@@ -20,7 +22,7 @@ public class FindAdlibRecordSet : DDCmdlet
   /// The field (tag or name) to search in
   /// </summary>
   [Parameter(Mandatory = true)]
-  public string? Field
+  public required string Field
   {
     get; set;
   }
@@ -29,7 +31,7 @@ public class FindAdlibRecordSet : DDCmdlet
   /// The search value.
   /// </summary>
   [Parameter(Mandatory = true)]
-  public string? Value
+  public required string Value
   {
     get; set;
   }
@@ -62,30 +64,15 @@ public class FindAdlibRecordSet : DDCmdlet
   }
 
   /// <summary>
-  /// Perform the search
+  /// Perform the search asynchronously
   /// </summary>
   protected override void ProcessRecord()
   {
-    provider.MilestoneReached += DataProvider_MilestoneChanged;
-
-    Exception? caught = null;
-    Task.Run(async () =>
-    {
-      try
-      {
-        var result = await provider.FindRecordSet(WorkingDirectory, Database!, Dataset, Field!, Language, Value, Results);
-        Result = result;
-      }
-      catch (Exception ex)
-      {
-        caught = ex;
-      }
-    }).Wait();
-
-    if (caught != null)
-    {
-      throw caught;
-    }
+    Result = RunWithEvent(
+        () => provider.MilestoneReached += DataProvider_MilestoneChanged,
+        () => provider.FindRecordSet(WorkingDirectory, Database, Dataset, Field, Language, Value, Results, default),
+        () => provider.MilestoneReached -= DataProvider_MilestoneChanged
+    );
 
     if (SessionState != null)
     {

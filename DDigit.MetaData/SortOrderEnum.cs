@@ -1,6 +1,6 @@
 ﻿namespace DDigit.MetaData;
 
-public enum SortOrderEnum
+public enum SortOrderEnum : short
 {
   Undefined = 0,
   Unsorted = 1,

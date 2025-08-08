@@ -1,4 +1,7 @@
-﻿namespace DDigit.PowerShell;
+﻿using DDigit.Classes;
+using DDigit.Exceptions;
+
+namespace DDigit.Scripting;
 
 /// <summary>
 /// Get a single record
@@ -11,7 +14,7 @@ public class GetAdlibRecord : DDCmdlet
   /// The database to retrieve the record from
   /// </summary>
   [Parameter(Mandatory = true)]
-  public string? Database
+  public required string Database
   {
     get; set;
   }
@@ -30,13 +33,17 @@ public class GetAdlibRecord : DDCmdlet
   /// </summary>
   protected override void ProcessRecord()
   {
-    if (Database != null)
+    IRecord? record = null;
+
+    async Task Search()
     {
-      var record = Read();
-      if (SessionState != null)
-      {
-        WriteObject(record);
-      }
+      record = await ReadAsync();
+    }
+    RunAsyncTask(Search);
+
+    if (SessionState != null)
+    {
+      WriteObject(record);
     }
   }
 
@@ -44,6 +51,17 @@ public class GetAdlibRecord : DDCmdlet
   /// Read a record
   /// </summary>
   /// <returns>record or null</returns>
-  public async Task<Record?> Read() =>
-    await provider.ReadRecord(WorkingDirectory, Database!, Id);
+  public async Task<Record?> ReadAsync() =>
+    await provider.ReadRecordAsync(WorkingDirectory, Database, Id, default);
+
+  public static Record? Read(string folder, string database, int id)
+  {
+    var provider = new DDataProvider(new MSSqlRepository());
+    var databaseData = provider.GetDatabase(folder, database) ??
+      throw new DatabaseNotFoundException(folder, database);
+    var task = provider.ReadRecordAsync(databaseData, id, null, null, default);
+    task.Wait();
+    var record = task.Result;
+    return record;
+  }
 }

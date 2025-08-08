@@ -2,12 +2,14 @@
 
 internal class WordList
 {
-  internal static async Task<List<int>> GetWordNumbers(IDDRepository repository, List<string> words, string language)
+  internal static async Task<List<int>> GetWordNumbers(IDbConnection connection, IDbTransaction transaction,
+                                                       IDDRepository repository, List<string> words, string language,
+                                                       CancellationToken cancellationToken)
   {
     var result = new List<int>(words.Count);
     foreach (var word in words)
     {
-      var wordNumber = await GetWordNumber(repository, new LanguageWord(language, word));
+      var wordNumber = await GetWordNumber(connection, transaction, repository, new LanguageWord(language, word), cancellationToken);
       if (wordNumber > 0)
       {
         result.Add(wordNumber);
@@ -16,7 +18,8 @@ internal class WordList
     return result;
   }
 
-  private static async Task<int> GetWordNumber(IDDRepository repository, LanguageWord word)
+  private static async Task<int> GetWordNumber(IDbConnection connection, IDbTransaction transaction, IDDRepository repository,
+                                               LanguageWord word, CancellationToken cancellationToken)
   {
     object wordNo = wordlist.Get(word.ToString());
     if (wordNo != null)
@@ -24,13 +27,13 @@ internal class WordList
       return (int)wordNo;
     }
 
-    int wordNumber = await repository.GetWordNumber(word.Text, word.Language);
+    int wordNumber = await repository.GetWordNumber(connection, transaction, word.Text, word.Language);
     if (wordNumber != 0)
     {
       return wordNumber;
     }
 
-    wordNumber = await repository.AddWord(word.Text, word.Language);
+    wordNumber = await repository.AddWord(connection, transaction, word.Text, word.Language, cancellationToken);
     if (wordNumber != 0)
     {
       var cacheItem = new CacheItem(word.ToString(), wordNumber);

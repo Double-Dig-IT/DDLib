@@ -3,7 +3,7 @@
 public partial class DDataProvider : IDataProvider
 {
   /// <summary>
-  /// Find record set is the main entry point for all searched.
+  /// Find record set is the main entry point for all searches.
   /// </summary>
   /// <param name="datasets">A list of datasets to filter</param>
   /// <param name="field">The field (tag or name) to search on</param>
@@ -11,8 +11,9 @@ public partial class DDataProvider : IDataProvider
   /// <param name="previousResults">A pipeline result from previous searches</param>
   /// <returns>A result set object</returns>
 
-  public async Task<ResultSet?> FindRecordSet(string path, string table, string[]? datasets,
-                                  string field, string? language, string? value, ResultSet? previousResults)
+  public async Task<ResultSet?> FindRecordSet(string path, string table, IEnumerable<string>? datasets,
+                                  string field, string? language, string value, ResultSet? previousResults,
+                                  CancellationToken cancellationToken)
   {
     if (string.IsNullOrWhiteSpace(field))
     {
@@ -31,75 +32,76 @@ public partial class DDataProvider : IDataProvider
     {
       return null;
     }
-    return await FindRecordSet(databaseData, fieldData, language, SearchOperators.Equals, value, datasetFilter, previousResults, Milestone, MilestoneReached);
-  }
 
-  public async Task<ResultSet> FindRecordSet(DatabaseData databaseData, FieldData fieldData, string? language, SearchOperators searchOperator, string? value,
-                                DatasetFilter? datasetFilter, ResultSet? previousResults, int milestone,
-                                EventHandler<MilestoneEventArgs>? milestoneReached)
-  {
-    using var connection = Repository.GetDbConnection(databaseData);
-    await Repository.PreparePreviousResultTable(connection, previousResults);
-
-    var result = fieldData.IsLinked ?
-      await Repository.FindLinkedRecordSet(connection, fieldData, value, datasetFilter, previousResults) :
-      await FindFlatRecordSet(connection, fieldData, language, searchOperator, value, datasetFilter, previousResults, milestone, milestoneReached);
-
-    await Repository.DropPreviousResultTable(connection, previousResults);
-    return result;
-  }
-
-  private async Task<ResultSet> FindFlatRecordSet(IDbConnection connection, FieldData fieldData, string? language,
-                                     SearchOperators searchOperator,
-                                     string? value, DatasetFilter? filter,
-                                     ResultSet? previousResults, int milestone,
-                                     EventHandler<MilestoneEventArgs>? milestoneReached)
-  {
-    var databaseData = fieldData.Database ?? throw new NullReferenceException(nameof(fieldData.Database));
-
-    var index = fieldData.PreferredIndex;
-    using var command = connection.CreateCommand();
-    var transaction = connection.BeginTransaction();
-    command.Transaction = transaction;
-    var result = index != null ?
-      await Repository.FindIndexedRecordSet(command, databaseData, fieldData, index.Type, index.TableName, language, searchOperator, value,
-      filter, previousResults) :
-      await FindNonIndexedRecordSet(command, fieldData, value, filter, previousResults, milestone, milestoneReached);
-
-    transaction.Commit();
-    return result;
-  }
-
-  private async Task<ResultSet> FindNonIndexedRecordSet(IDbCommand command, FieldData fieldData, string? value,
-                                   DatasetFilter? filter, ResultSet? previousResults,
-                                   int milestone, EventHandler<MilestoneEventArgs>? milestoneReached)
-  {
-    var databaseData = fieldData.Database ?? throw new NullReferenceException(nameof(fieldData.Database));
-    var databaseName = databaseData.Name ?? throw new NullReferenceException(nameof(fieldData.Database.Name));
-
-    var count = 0;
-    var result = new ResultSet(databaseData);
-    var allRecords = await Repository.ReadAllRecords(command, databaseData, filter, previousResults);
-    foreach (var id in allRecords.Ids)
+    var searchTree = new SearchTree()
     {
-      var record = await GetRecord(databaseData, databaseName, id);
-      if (record != null)
+      Database = databaseData,
+      Root = new SearchTreeLeaf(fieldData, value, SearchOperatorEnum.Equals, language, null),
+      PreviousResults = previousResults,
+      DatasetFilter = datasetFilter,
+      Milestone = Milestone,
+      MilestoneReached = MilestoneReached,
+      Cancellation = cancellationToken
+    };
+
+    return await FindRecordSetAsync(searchTree, (SearchTreeLeaf)searchTree.Root!);
+  }
+
+  internal async Task<ResultSet> FindRecordSetAsync(SearchTree searchTree, SearchTreeLeaf leaf)
+  {
+    async Task<ResultSet> FindFlatRecordSetAsync(SearchTree searchTree, SearchTreeLeaf leaf, IDbTransaction? transaction)
+    {
+      using var command = searchTree.Connection!.CreateCommand();
+
+      var field = leaf.Field ?? throw new NullReferenceException(nameof(leaf.Field));
+      var result = field.PreferredIndex != null ?
+        await Repository.FindFlatIndexedRecordSetAsync(command, searchTree, leaf) :
+        await FindNonIndexedRecordSetAsync(command, searchTree, leaf, transaction);
+
+      return result;
+    }
+
+    async Task<ResultSet> FindNonIndexedRecordSetAsync(IDbCommand command, SearchTree searchTree,
+                                   SearchTreeLeaf leaf, IDbTransaction? transaction)
+    {
+      var field = leaf.Field ?? throw new NullReferenceException(nameof(leaf.Field));
+      var databaseData = field.Database ?? throw new NullReferenceException(nameof(field.Database));
+
+      var count = 0;
+      var result = new ResultSet(databaseData);
+      var allRecords = await Repository.ReadAllRecordsAsync(command, searchTree);
+      foreach (var id in allRecords.Ids)
       {
-        if (record.Match(fieldData, value))
+        var record = await ReadRecordAsync(databaseData, id, searchTree.Connection, transaction, searchTree.Cancellation);
+        if (record != null)
         {
-          result.Ids.Add(id);
-        }
-        count++;
-        if (count % milestone == 0)
-        {
-          milestoneReached?.Invoke(null, new MilestoneEventArgs(count, allRecords.Ids.Count));
+          if (record.Match(field, leaf.Values))
+          {
+            result.Ids.Add(id);
+          }
+          count++;
+          if (count % searchTree.Milestone == 0)
+          {
+            searchTree.MilestoneReached?.Invoke(null, new MilestoneEventArgs(count, allRecords.Ids.Count));
+          }
         }
       }
+      return result;
     }
+
+    searchTree.Connection = await Repository.GetDbConnectionAsync(searchTree.Database!);
+
+    await Repository.PreparePreviousResultTable(searchTree);
+
+    var field = leaf.Field ?? throw new NullReferenceException(nameof(leaf.Field));
+    var result = field.IsLinked ? await Repository.FindLinkedRecordSetAsync(searchTree, leaf) : await FindFlatRecordSetAsync(searchTree, leaf, null);
+
+    await Repository.DropPreviousResultTable(searchTree);
+    searchTree.Connection.Dispose();
+    searchTree.Connection = null;
+
     return result;
   }
 
-  private async Task<ResultSet> FindRecordSet(DatabaseData databaseData, int setId, DatasetFilter? datasetFilter, ResultSet? previousResults)
-    => await Repository.GetResultSet(databaseData, setId, datasetFilter, previousResults);
-
+  private Task<ResultSet> FindRecordSet(SearchTree searchTree, int setId) => Repository.GetResultSetAsync(searchTree, setId);
 }

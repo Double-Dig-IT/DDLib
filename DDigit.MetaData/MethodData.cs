@@ -1,88 +1,106 @@
 ﻿namespace DDigit.MetaData;
 
-public class MethodData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace) : 
-  BaseData(objectType, stream, encoding, fileName, Properties, trace), IHasScreens
+public class MethodData : BaseData, IHasScreens
 {
+  public MethodData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace) :
+    base(objectType, stream, encoding, fileName, Properties, trace)
+  {
+  }
+
+  public MethodData() : base(ObjectTypeEnum.Method, Properties)
+  {
+  }
 
   /// <summary>
   /// The type of this method
   /// </summary>
   public MethodTypeEnum Type
   {
-    get; private set;
+    get; set;
   }
 
   /// <summary>
-  /// The name (title) of this method.
+  /// The title of this method.
   /// </summary>
-  public string? Name
+  public string? Title
   {
-    get; private set;
+    get => Texts[0].Text;
+    set
+    {
+      if (Texts.Count > 0)
+      {
+        Texts[0].Text = value;
+      }
+      else
+      {
+        Texts.Add(new LanguageTextData(ObjectTypeEnum.MethodText, value));
+      }
+    }
   }
 
   /// <summary>
   /// The index tag for this method.
   /// </summary>
-  public string? Index
+  public string Index
   {
     get; private set;
-  }
+  } = "";
 
   /// <summary>
   /// The second index tag for this method (in case of a range search)
   /// </summary>
-  public string? Index2
+  public string Index2
   {
     get; private set;
-  }
+  } = "";
 
   /// <summary>
   /// The query this method (in case of a fixed query)
   /// </summary>
-  public string? Query
+  public string Query
   {
     get; private set;
-  }
+  } = "";
 
   /// <summary>
   /// The help key for this method
   /// </summary>
-  public string? HelpKey
+  public string HelpKey
   {
     get; private set;
-  }
+  } = "";
 
   /// <summary>
   /// The sort key for this method
   /// </summary>
-  public string? SortKey
+  public string SortKey
   {
     get; private set;
-  }
+  } = "";
 
   /// <summary>
   /// The sort type for this method
   /// </summary>
-  public string? SortType
+  public string SortType
   {
     get; private set;
-  }
+  } = "";
 
   /// <summary>
   /// The sort order for this method
   /// </summary>
-  public string? SortOrder
+  public string SortOrder
   {
     get; private set;
-  }
+  } = "";
 
   /// <summary>
   /// The sort adapl for this method
   /// </summary>
-  public string? SortAdapl
+  public string SortAdapl
   {
     get; private set;
-  }
+  } = "";
 
   /// <summary>
   /// Truncation for this method
@@ -95,39 +113,39 @@ public class MethodData(ObjectTypeEnum objectType, Stream stream, Encoding encod
   /// <summary>
   /// Domain for this method
   /// </summary>
-  public string? Domain
+  public string Domain
   {
-    get; private set;
-  }
+    get; set;
+  } = "";
 
   /// <summary>
   /// Initial screen for this method
   /// </summary>
-  public string? InitialScreen
+  public string InitialScreen
   {
     get; private set;
-  }
+  } = "";
 
   /// <summary>
   /// Range name index for this method
   /// </summary>
-  public string? RangeNameIndex
+  public string RangeNameIndex
   {
     get; private set;
-  }
+  } = "";
 
   /// <summary>
   /// Additional index tags for this method
   /// </summary>
-  public string? IndexTags
+  public string IndexTags
   {
-    get; private set;
-  }
+    get; set;
+  } = "";
 
   /// <summary>
   /// The texts for the method
   /// </summary>
-  public List<LanguageTextData> Texts
+  public TextsList Texts
   {
     get; private set;
   } = [];
@@ -155,13 +173,13 @@ public class MethodData(ObjectTypeEnum objectType, Stream stream, Encoding encod
 
   internal void Add(MethodSortSpecificationData methodSortSpecificationData) => SortSpecification.Add(methodSortSpecificationData);
 
-  public override string? ToString() => Name;
+  public override string? ToString() => Title;
 
   internal static PropertyList Properties =
   [
     new PropertyMap (0,  DataTypesEnum.Int16,   "ElementCount"),
     new PropertyMap (1,  DataTypesEnum.Enum,    "Type", typeof(MethodTypeEnum)),
-    new PropertyMap (2,  DataTypesEnum.String,  "Name"),
+    new PropertyMap (2,  DataTypesEnum.String,  "Title"),
     new PropertyMap (3,  DataTypesEnum.String,  "Index"),
     new PropertyMap (4,  DataTypesEnum.String,  "Index2"),
     new PropertyMap (5,  DataTypesEnum.String,  "Query"),

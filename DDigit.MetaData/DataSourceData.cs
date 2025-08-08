@@ -13,11 +13,21 @@ public class DataSourceData(ObjectTypeEnum objectType, Stream stream, Encoding e
   }
 
   /// <summary>
-  /// The name of the data source
+  /// The title of the data source
   /// </summary>
-  public string? Name
+  public string? Title
   {
-    get; private set;
+    get => Texts[0].Text;
+    set {
+      if (Texts.Count > 0)
+      {
+        Texts[0].Text = value;
+      }
+      else
+      {
+        Texts.Add(new LanguageTextData(ObjectTypeEnum.DataSourceText, value));
+      }
+    }
   }
 
   /// <summary>
@@ -55,7 +65,7 @@ public class DataSourceData(ObjectTypeEnum objectType, Stream stream, Encoding e
   /// <summary>
   /// A list of texts
   /// </summary>
-  public List<LanguageTextData> Texts
+  public TextsList Texts
   {
     get;
     private set;
@@ -116,6 +126,8 @@ public class DataSourceData(ObjectTypeEnum objectType, Stream stream, Encoding e
     get; private set;
   } = [];
 
+  public override string? ToString() => Title;
+
   internal void Add(FriendlyDatabaseData friendlyDatabase) => FriendlyDatabases.Add(friendlyDatabase);
 
   internal void Add(ConnectEntityData connectEntity) => ConnectEntities.Add(connectEntity);
@@ -130,7 +142,7 @@ public class DataSourceData(ObjectTypeEnum objectType, Stream stream, Encoding e
   [
     new PropertyMap (0,  DataTypesEnum.Int16,  "ElementCount"),
     new PropertyMap (1,  DataTypesEnum.Enum,   "Type", typeof(DataSourceTypeEnum)),
-    new PropertyMap (2,  DataTypesEnum.String, "Name"),
+    new PropertyMap (2,  DataTypesEnum.String, "Title"),
     new PropertyMap (3,  DataTypesEnum.String, "DatabasePath"),
     new PropertyMap (4,  DataTypesEnum.String, "Dataset"),
     new PropertyMap (5,  DataTypesEnum.String, "HelpKey"),
@@ -154,7 +166,7 @@ public class DataSourceData(ObjectTypeEnum objectType, Stream stream, Encoding e
       (AccessRightsData.Properties, AccessRights),
       (JobData.Properties, ExportJobs),
       (FriendlyDatabaseData.Properties, FriendlyDatabases),
-      //(CloudObjectData, CloudObjects), ToDo: Add cloud objects
+      //(CloudObjectData.Properties, CloudObjects), // ToDo: Add cloud objects
       (TaskData.Properties, Tasks),
       (ConnectEntityData.Properties, ConnectEntities),
    ];

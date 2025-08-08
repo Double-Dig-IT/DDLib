@@ -36,6 +36,15 @@ public class DatasetData(ObjectTypeEnum objectType, Stream stream, Encoding enco
     get; private set;
   } = [];
 
+  /// <summary>
+  /// A list of dataset specific fields.
+  /// </summary>
+  public List<FieldData> Fields
+  {
+    get;
+    private set;
+  } = [];
+
   public override string ToString() => $"{Name} {LowerLimit}-{UpperLimit}";
 
   internal static readonly PropertyList Properties =
@@ -52,5 +61,6 @@ public class DatasetData(ObjectTypeEnum objectType, Stream stream, Encoding enco
   internal override (PropertyList, IEnumerable<object>)[] Children =>
   [
       (AccessRightsData.Properties, AccessRights),
+      (FieldData.Properties, Fields)
   ];
 }

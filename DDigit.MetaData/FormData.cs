@@ -1,12 +1,13 @@
-﻿using System.Data;
-using System;
-
-namespace DDigit.MetaData;
+﻿namespace DDigit.MetaData;
 
 public class FormData : FileData
 {
 
   public FormData() : base(ObjectTypeEnum.Form, null, false)
+  {
+  }
+
+  public FormData(string path, bool trace = false) : base (ObjectTypeEnum.Form, path, trace)
   {
   }
 
@@ -78,7 +79,24 @@ public class FormData : FileData
 
   public string? ObjectName { get; private set; }
 
-  public string? Title { get; private set; }
+  /// <summary>
+  /// The title of the form
+  /// </summary>
+  public string? Title
+  {
+    get => Texts[0].Text;
+    set
+    {
+      if (Texts.Count > 0)
+      {
+        Texts[0].Text = value;
+      }
+      else
+      {
+        Texts.Add(new LanguageTextData(ObjectTypeEnum.FormText, value));
+      }
+    }
+  }
 
   public short Height { get; private set; }
 
@@ -96,9 +114,9 @@ public class FormData : FileData
 
   public string? HelpKey { get; private set; }
 
-  public string? BeforeScreenScript { get; private set; }
+  public string? BeforeScreenScript { get; set; }
 
-  public string? AfterScreenScript { get; private set; }
+  public string? AfterScreenScript { get; set; }
 
   public bool ConvertToOEM { get; private set; }
 
@@ -120,7 +138,7 @@ public class FormData : FileData
 
   public List<FormObjectData> Fields { get; private set; } = [];
 
-  public List<LanguageTextData> Texts { get; private set; } = [];
+  public TextsList Texts { get; private set; } = [];
 
   public List<AccessRightsData> AccessRights { get; private set; } = [];
 
@@ -164,6 +182,6 @@ public class FormData : FileData
     (AccessRightsData.Properties, AccessRights)
   ];
 
-  public override string Extension => ".fmt";
+  public static string Extension => ".fmt";
 
 }

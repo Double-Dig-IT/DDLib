@@ -1,69 +1,64 @@
 ﻿namespace DDigit.Data;
 
-public class IndexChanges
+public class IndexChanges : List<IndexRow>
 {
   internal IndexChanges(IndexData index)
   {
     Index = index;
   }
 
-  public List<IndexRow> Modifications
-  {
-    get;
-    private set;
-  } = [];
+  internal IndexData Index { get; }
 
-  internal IndexData Index
+  public override string ToString() => $"{Index.Name} ({Count})";
+
+  internal IndexRow FindOrCreateRow(BooleanIndexRow row)
+    => SelectRow(row, this.Cast<BooleanIndexRow>().
+        FirstOrDefault(x => (string?)x.Term == (string?)row.Term && x.Id == row.Id));
+
+  internal IndexRow FindOrCreateRow(IntegerIndexRow row)
+    => SelectRow(row, this.Cast<IntegerIndexRow>().
+        FirstOrDefault(x => (int?)x.Term == (int?)row.Term && x.Id == row.Id));
+
+  /// <summary>
+  /// The display key for alphanumeric values must match, the Term contains padded data
+  /// </summary>
+  /// <param name="row">The row to search for</param>
+  /// <returns>An existing or a new row</returns>
+  internal IndexRow FindOrCreateRow(AlphaNumericIndexRow row)
+    => SelectRow(row, this.Cast<AlphaNumericIndexRow>().
+       FirstOrDefault(x => (string?)x.DisplayTerm == (string?)row.DisplayTerm && x.Id == row.Id));
+   
+
+  internal IndexRow FindOrCreateRow(TermIndexRow row)
   {
-    get;
+    var result = SelectRow(row, this.
+      Cast<TermIndexRow>().
+        FirstOrDefault(x => (string?)x.Term == (string?)row.Term &&
+                            x.Tag == row.Tag &&
+                            x.Occ == row.Occ &&
+                            x.Domain == row.Domain &&
+                            x.Language == row.Language &&
+                            x.Id == row.Id));
+    return result;
   }
 
-  public override string ToString() => $"{Index.Name} ({Modifications.Count})";
+  internal IndexRow FindOrCreateRow(DateIndexRow row)
+   => SelectRow(row, this.
+      Cast<DateIndexRow>().
+        FirstOrDefault(x => x.DisplayTerm == row.DisplayTerm && x.Id == row.Id));
 
-  internal void DeleteKey(string table, int key, int id) =>
-    FindRow(table, key, id).Count--;
+  internal IndexRow FindOrCreateRow(IsoDateIndexRow row)
+   => SelectRow(row, this.
+      Cast<IsoDateIndexRow>().
+        FirstOrDefault(x => x.Term == row.Term && x.Id == row.Id));
 
-  internal void DeleteKey(string table, string term, string displayTerm, string? domain, string language, int id) =>
-    FindRow(table, term, displayTerm, domain, language, id).Count--;
-
-  internal void InsertKey(string table, int key, int id) =>
-    FindRow(table, key, id).Count++;
-
-  internal void InsertKey(string table, string term, string displayTerm, string? domain, string language, int id) =>
-   FindRow(table, term, displayTerm, domain, language, id).Count++;
-
-  private IntegerIndexRow FindRow(string table, int wordNumber, int id)
+  private IndexRow SelectRow(IndexRow row, IndexRow? existing)
   {
-    var row = new IntegerIndexRow(table, wordNumber, id);
-    var existingRow = Modifications.Cast<IntegerIndexRow>().FirstOrDefault(x => x.Key == row.Key);
-    if (existingRow != null)
+    if (existing == null)
     {
-      row = existingRow;
+      Add(row);
     }
-    else
-    {
-      Modifications.Add(row);
-    }
-    return row;
-  }
-
-  private TermIndexRow FindRow(string table, string term, string displayTerm, string? domain,
-                  string language, int id)
-  {
-    var row = new TermIndexRow(table, term, displayTerm, domain, language, id);
-    var existingRow = Modifications.Cast<TermIndexRow>().FirstOrDefault(x => x.Term == row.Term &&
-                                                        x.Domain == row.Domain &&
-                                                        x.Language == row.Language &&
-                                                        x.Id == row.Id);
-    if (existingRow != null)
-    {
-      row = existingRow;
-    }
-    else
-    {
-      Modifications.Add(row);
-    }
-    return row;
+    return existing ?? row;
   }
 }
 

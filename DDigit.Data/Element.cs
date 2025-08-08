@@ -1,26 +1,20 @@
-﻿namespace DDigit.Data;
+﻿
+namespace DDigit.Data;
 
 public class Element
 {
-  public Element(object? value, string language = "", bool invariant = false)
+  public Element(object? value, string language = "", bool invariant = false, bool? isLocal = null)
   {
     Values.Push(value);
     Language = language;
     Invariant = invariant;
+    IsLocal = isLocal;
   }
 
-  internal Stack<object?> Values
+  internal ConcurrentStack<object?> Values
   {
-    get; set;
-  } = new();
-
-
-  public object? NeutralValue
-  { 
     get; 
-    set;
-  }
-
+  } = [];
 
   public bool Invariant
   {
@@ -32,22 +26,27 @@ public class Element
     get; set;
   }
 
-  public bool Modified
+  public bool? IsLocal
   {
     get; set;
   }
 
-  public object? InsertValue => Values.Count > 0 ? Values.First() : null;
+  public override string? ToString() => !Values.IsEmpty ? Values.TryPeek(out var result) ? result?.ToString() : null : null;
 
-  public object? DeleteValue => Values.Count > 0 ? Values.Last() : null;
+  public object? Value => !Values.IsEmpty ? Values.TryPeek(out var result) ? result : null : null;
 
-  public override string? ToString() => Values.Count > 0 ? Values.Peek()?.ToString() : null;
+  public int? IntValue
+      => Values.TryPeek(out var result) ?
+            result is string v ? int.TryParse(v, out var IntValue) ? 
+              IntValue : null : (int?)result : null;
 
-  public object? Value => Values.Count > 0 ? Values.Peek() : null;
+  internal void SetData(object? value) => Values.Push(value);
 
-  internal void SetData(string? value)
+  internal void ReplaceData(string? value)
   {
+    Values.TryPop(out _);
     Values.Push(value);
-    Modified = true;
   }
+
+  internal Element Clone() => new(Value, Language, Invariant);
 }

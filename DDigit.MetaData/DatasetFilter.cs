@@ -2,7 +2,7 @@
 
 public class DatasetFilter : Dictionary<string, DatasetData>
 {
-  public DatasetFilter(DatabaseData database, string[] datasets)
+  public DatasetFilter(DatabaseData database, IEnumerable<string> datasets)
   {
     foreach (var dataset in datasets)
     {

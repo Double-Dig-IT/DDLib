@@ -1,9 +1,16 @@
-﻿
-
-namespace DDigit.DataProvider;
+﻿namespace DDigit.DataProvider;
 
 public partial class DDataProvider : IDataProvider
 {
+  readonly DDSearchParser parser = new();
+
+  public SearchTree? ParseSearchStatement(string folder, string database, string statement)
+  {
+    var databaseData = MetaDataCache.ReadDatabase(folder, database, false) ??
+      throw new DatabaseNotFoundException(folder, database);
+    return parser.Parse(databaseData, statement, default);
+  }
+
   /// <summary>
   /// Run a search statement
   /// </summary>
@@ -12,41 +19,65 @@ public partial class DDataProvider : IDataProvider
   /// <param name="statement">The statement to executer</param>
   /// <param name="previousResults">Previous results (from a PowerShell pipeline)</param>
   /// <returns></returns>
-  public async Task<ResultSet?> Search(string folder, string database, string[]? datasets, string statement, ResultSet? previousResults = null, int milestone = 1000)
+  public async Task<ResultSet?> SearchAsync(string folder,
+                                            string database,
+                                            IEnumerable<string>? datasets, string statement,
+                                            ResultSet? previousResults = null, 
+                                            int milestone = 0, 
+                                            CancellationToken cancellationToken = default)
   {
-    var databaseData = MetaDataCache.ReadDatabase(folder, database, false);
-    if (databaseData == null)
+    try
     {
-      return null;
-    }
+      var databaseData = MetaDataCache.ReadDatabase(folder, database, false);
+      if (databaseData == null)
+      {
+        return null;
+      }
+   
+      var datasetFilter = datasets != null ? new DatasetFilter(databaseData, datasets) : null;
+      var searchTree = parser.Parse(databaseData, statement, cancellationToken);
+      searchTree.DatasetFilter = datasetFilter;
+      searchTree.PreviousResults = previousResults;
+      searchTree.Cancellation = cancellationToken;
+      searchTree.Milestone = milestone;
 
-    var datasetFilter = datasets != null ? new DatasetFilter(databaseData, datasets) : null;
-    var searchTree = DDSearch.Parse(databaseData, statement);
-    return searchTree != null ? await Search(databaseData, datasetFilter, searchTree, previousResults, milestone) : null;
+      return searchTree != null ?
+        (await SearchAsync(searchTree, searchTree.Root!)).Randomize(searchTree).Limit(searchTree) : null;
+    }
+    catch (TaskCanceledException)
+    {
+      throw;
+    }
+    catch (Exception ex)
+    {
+      throw new SearchException(folder, database, statement, ex);
+    }
   }
 
 
-  private async Task<ResultSet> Search(DatabaseData databaseData, DatasetFilter? datasetFilter, SearchNode node, ResultSet? previousResults, int milestone)
+  private async Task<ResultSet> SearchAsync(SearchTree searchTree, SearchNode searchNode)
   {
-    ResultSet? result = null;
-    if (node is SearchTreeNode searchTreeNode)
+    // This is a simple search.
+    if (searchNode is SearchTreeLeaf leaf)
     {
-      result = JoinRecordSet(await Search(databaseData, datasetFilter, searchTreeNode.Left, previousResults, milestone),
-                           searchTreeNode.Operator,
-                           await Search(databaseData, datasetFilter, searchTreeNode.Right, previousResults, milestone));
+      return await FindRecordSetAsync(searchTree, leaf);
     }
-    else if (node is SearchTreeLeaf leaf)
+
+    // This is a Boolean search with 2 nodes that need to be combined
+    if (searchNode is SearchTreeNode searchTreeNode)
     {
-      result = await FindRecordSet(databaseData, leaf.Field!, leaf.Language, leaf.Operator, leaf.Value.ToString(), datasetFilter, previousResults, milestone, MilestoneReached);
+      var left = await SearchAsync(searchTree, searchTreeNode.Left);
+      var right = await SearchAsync(searchTree, searchTreeNode.Right);
+      return JoinRecordSet(left, searchTreeNode.Operator, right);
     }
-    else if (node is SearchSetLeaf searchSetLeaf)
+
+    // We are dealing with a set here.
+    if (searchNode is SearchSetLeaf searchSetLeaf)
     {
-      result = await FindRecordSet(databaseData, searchSetLeaf.SetId, datasetFilter, previousResults);
+      return await Repository.GetResultSetAsync(searchTree, searchSetLeaf.SetId);
     }
-    else
-    {
-      throw new DDException($"Unexpected search node: {node}");
-    }
-    return result.Randomize(node.SampleSize, node.Seed, node.Unique);
+
+    // This should never happen
+    throw new DDException($"Unexpected search node: {searchNode}");
   }
 }

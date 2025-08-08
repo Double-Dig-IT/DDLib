@@ -1,11 +1,11 @@
 ﻿namespace DDigit.Exceptions;
 
-public class FieldIsNotRepeatedException(string tag, int occ) : DDException($"Field '{tag}' is not repeated")
+public class FieldIsNotRepeatedException(string? fieldNameOrTag, int occ) : DDException($"Field '{fieldNameOrTag}' is not repeated")
 {
-  public string Tag
+  public string? FieldNameOrTag
   {
     get;
-  } = tag;
+  } = fieldNameOrTag;
 
   public int Occ
   {

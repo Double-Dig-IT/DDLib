@@ -17,7 +17,7 @@ internal static class Extensions
   internal static short ReadInt16(this Stream stream)
   {
     var buffer = new Span<byte>(new byte[2]);
-    stream.Read(buffer);
+    stream.ReadExactly(buffer);
     return (short)(buffer[0] | buffer[1] << 8);
   }
 
@@ -30,7 +30,7 @@ internal static class Extensions
   internal static int ReadInt32(this Stream stream)
   {
     var buffer = new Span<byte>(new byte[4]);
-    stream.Read(buffer);
+    stream.ReadExactly(buffer);
     return buffer[0] | buffer[1] << 8 | buffer[2] << 16 | buffer[3] << 24;
   }
 
@@ -39,7 +39,7 @@ internal static class Extensions
   internal static float ReadFloat(this Stream stream)
   {
     var buffer = new Span<byte>(new byte[4]);
-    stream.Read(buffer);
+    stream.ReadExactly(buffer);
     return BitConverter.ToSingle(buffer);
   }
 

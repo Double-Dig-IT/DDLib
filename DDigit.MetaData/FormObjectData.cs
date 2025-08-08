@@ -7,7 +7,24 @@ public class FormObjectData(ObjectTypeEnum objectType, Stream stream, Encoding t
 
   public string? Tag { get; private set; }
 
-  public string? Title { get; private set; }
+  /// <summary>
+  /// The title of the form
+  /// </summary>
+  public string? Title
+  {
+    get => Texts[0].Text;
+    set
+    {
+      if (Texts.Count > 0)
+      {
+        Texts[0].Text = value;
+      }
+      else
+      {
+        Texts.Add(new LanguageTextData(ObjectTypeEnum.FormText, value));
+      }
+    }
+  }
 
   public short LabelY { get; private set; }
 
@@ -19,9 +36,9 @@ public class FormObjectData(ObjectTypeEnum objectType, Stream stream, Encoding t
 
   public short Width { get; private set; }
 
-  public short Occurrence { get; private set; }
+  public short Occurrence { get; set; }
 
-  public short Group { get; private set; }
+  public short Group { get; set; }
 
   public short TextColor { get; private set; }
 
@@ -39,9 +56,9 @@ public class FormObjectData(ObjectTypeEnum objectType, Stream stream, Encoding t
 
   public string? RegularExpression { get; private set; }
 
-  public string? ZoomForm { get; private set; }
+  public string? ZoomForm { get; set; }
 
-  public string? ZoomEditForm { get; private set; }
+  public string? ZoomEditForm { get; set; }
 
   public int TextForegroundRGB { get; private set; }
 
@@ -73,7 +90,7 @@ public class FormObjectData(ObjectTypeEnum objectType, Stream stream, Encoding t
 
   public WrapModeEnum WrapMode { get; private set; }
 
-  public List<LanguageTextData> Texts { get; private set; } = [];
+  public TextsList Texts { get; private set; } = [];
 
   public List<FieldConditionData> SuppressConditions { get; private set; } = [];
 

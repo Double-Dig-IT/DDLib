@@ -1,18 +1,34 @@
-﻿using System.Text;
+﻿using System.IO;
+using System.Text;
 
 namespace DDigit.DataProvider;
 
 public partial class DDataProvider : IDataProvider
 {
-  public async Task<ResultSet?> RandomSample(string folder, string? database, string[]? datasets, ResultSet? results, int sample, int? seed, bool unique)
+  public async Task<ResultSet?> RandomSample(string folder, string databaseName, IEnumerable<string>? datasets,
+                                             ResultSet? results, int sampleSize, int? seed, bool unique,
+                                             CancellationToken cancellationToken)
   {
+    var databaseData = GetDatabase(folder, databaseName) ?? throw new DatabaseNotFoundException(folder, databaseName);
+
+    var searchTree = new SearchTree()
+    {
+      Database = databaseData,
+      SampleSize = sampleSize,
+      Unique = unique,
+      PreviousResults = results,
+      DatasetFilter = datasets != null ? new DatasetFilter(databaseData, datasets) : null,
+      Cancellation = cancellationToken,
+    };
+   
     if (results != null)
     {
-      return results.Randomize(sample, seed, unique);
+      return results.Randomize(searchTree);
     }
-    if (database != null)
+
+    if (databaseData != null)
     {
-      var statement = new StringBuilder($"all random {sample}");
+      var statement = new StringBuilder($"all random {sampleSize}");
       if (seed != null)
       {
         statement.Append($" seed {seed}");
@@ -22,7 +38,7 @@ public partial class DDataProvider : IDataProvider
         statement.Append(" unique");
       }
 
-      return await Search(folder, database, datasets, statement.ToString(), results);
+      return await SearchAsync(folder, databaseName, datasets, statement.ToString(), results, 1000, cancellationToken);
     }
 
     throw new DDException("No input provided, must be database or a result set.");

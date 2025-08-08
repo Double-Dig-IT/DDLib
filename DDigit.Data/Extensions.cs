@@ -1,11 +1,13 @@
-﻿namespace DDigit.Data;
+﻿using System.Text;
 
-internal static class Extensions
+namespace DDigit.Data;
+
+public static class Extensions
 {
   internal static void AddField(this JsonObject record, string fieldName, object value, SerializeOptions? options = null)
   {
     var fields = options?.Fields;
-    if (fields == null || fields.Contains(fieldName) || fields.Contains("*"))
+    if (fields == null || fields.Contains("*") || fields.Contains(fieldName))
     {
       if (value is string s)
       {
@@ -24,5 +26,19 @@ internal static class Extensions
       }
       throw new DataException($"Data type {value.GetType().Name} is not supported (yet)");
     }
+  }
+
+  public static string EscapeQuotes(this string term)
+  {
+    var escaped = new StringBuilder();
+    foreach (var ch in term)
+    {
+      if (ch == '\\' || ch == '\'' || ch == '\"')
+      {
+        escaped.Append('\\');
+      }
+      escaped.Append(ch);
+    }
+    return escaped.ToString();
   }
 }

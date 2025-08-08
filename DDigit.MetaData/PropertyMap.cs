@@ -2,15 +2,15 @@
 
 public class PropertyMap
 {
-  internal PropertyMap(short element, DataTypesEnum dataType, string? name = null, Type? type = null)
+  internal PropertyMap(short elementIndex, DataTypesEnum dataType, string? name = null, Type? type = null)
   {
-    Element = element;
+    ElementIndex = elementIndex;
     Type = type;
     DataType = dataType;
     Name = name;
   }
 
-  internal short Element
+  internal short ElementIndex
   {
     get; private set;
   }

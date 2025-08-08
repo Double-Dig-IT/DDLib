@@ -1,4 +1,6 @@
-﻿namespace DDigit.PowerShell;
+﻿using DDigit.Search;
+
+namespace DDigit.Scripting;
 
 /// <summary>
 /// Perform a boolean operator on two sets.
@@ -20,7 +22,7 @@ public class JoinAdlibRecordSet : DDCmdlet
   /// The left hand set
   /// </summary>
   [Parameter(Mandatory = true, Position = 0)]
-  public ResultSet? Left
+  public required ResultSet Left
   {
     get; set;
   }
@@ -29,7 +31,7 @@ public class JoinAdlibRecordSet : DDCmdlet
   /// The right hand side set
   /// </summary>
   [Parameter(Mandatory = true, Position = 1)]
-  public ResultSet? Right
+  public required ResultSet Right
   {
     get; set;
   }

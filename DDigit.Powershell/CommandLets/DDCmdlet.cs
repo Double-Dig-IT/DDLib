@@ -1,4 +1,6 @@
-﻿namespace DDigit.PowerShell;
+﻿using DDigit.Search;
+
+namespace DDigit.Scripting;
 
 /// <summary>
 /// base class for all double digit cmdlets
@@ -8,13 +10,13 @@ public abstract class DDCmdlet : PSCmdlet
   /// <summary>
   /// THe storage provider
   /// </summary>
-  protected IDataProvider provider = new DDataProvider(new Repository.MSSqlRepository());
+  protected IDataProvider provider = new DDataProvider(new MSSqlRepository());
 
   /// <summary>
-  /// All cmdlets have na optional Path parameter
+  /// All cmdlets have an optional Path parameter
   /// </summary>
   [Parameter()]
-  public string? Path
+  public required string Path
   {
     get; set;
   }
@@ -22,7 +24,7 @@ public abstract class DDCmdlet : PSCmdlet
   /// <summary>
   /// Get the Working directory, this is either the path, when entered or the current folder
   /// </summary>
-  protected string WorkingDirectory => Path ?? new SessionState().Path.CurrentLocation.ToString();
+  protected string WorkingDirectory => Path ?? SessionState.Path.CurrentLocation.ToString();
 
 
   /// <summary>
@@ -90,6 +92,22 @@ public abstract class DDCmdlet : PSCmdlet
     if (caught != null)
     {
       throw caught;
+    }
+  }
+
+  public static T RunWithEvent<T>(
+        Action attach,
+        Func<Task<T>> asyncFunc,
+        Action detach)
+  {
+    try
+    {
+      attach();
+      return Task.Run(asyncFunc).GetAwaiter().GetResult();
+    }
+    finally
+    {
+      detach();
     }
   }
 }

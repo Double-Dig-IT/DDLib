@@ -1,6 +1,6 @@
 ﻿namespace DDigit.MetaData;
 
-public enum IndexTypeEnum
+public enum IndexTypeEnum : short
 {
   Undefined = 0,
   Text = 1,

@@ -1,4 +1,6 @@
-﻿namespace DDigit.PowerShell;
+﻿using DDigit.Search;
+
+namespace DDigit.Scripting;
 
 /// <summary>
 /// Get a set of records
@@ -20,7 +22,7 @@ public class GetAdlibRecordSet : DDCmdlet
   /// The database for which to get the set
   /// </summary>
   [Parameter(Mandatory = true)]
-  public string? Database
+  public required string Database
   {
     get; set;
   }
@@ -29,7 +31,7 @@ public class GetAdlibRecordSet : DDCmdlet
   /// The set number
   /// </summary>
   [Parameter(Mandatory = true)]
-  public int Set
+  public required int Set
   {
     get; set;
   }
@@ -39,7 +41,7 @@ public class GetAdlibRecordSet : DDCmdlet
   /// </summary>
   protected override void ProcessRecord()
   {
-    var result = provider.GetRecordSet(WorkingDirectory, Database!, Set!);
+    var result = provider.GetRecordSetAsync(WorkingDirectory, Database, Set, CancellationToken.None);
     if (SessionState != null)
     {
       WriteObject(result);

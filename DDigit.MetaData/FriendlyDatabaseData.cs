@@ -8,9 +8,23 @@ public class FriendlyDatabaseData(ObjectTypeEnum objectType, Stream stream, Enco
     get; private set;
   }
 
+  /// <summary>
+  /// The field name.
+  /// </summary>
   public string? Text
   {
-    get; private set;
+    get => Texts[0].Text;
+    set
+    {
+      if (Texts.Count > 0)
+      {
+        Texts[0].Text = value;
+      }
+      else
+      {
+        Texts.Add(new LanguageTextData(ObjectTypeEnum.ExternalSourceName, value));
+      }
+    }
   }
 
   public string? SearchScreen
@@ -38,7 +52,7 @@ public class FriendlyDatabaseData(ObjectTypeEnum objectType, Stream stream, Enco
     get; private set;
   }
 
-  public List<LanguageTextData> Texts
+  public TextsList Texts
   {
     get; private set;
   } = [];

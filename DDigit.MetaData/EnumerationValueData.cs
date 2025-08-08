@@ -1,6 +1,6 @@
 ﻿namespace DDigit.MetaData;
 
-public class EnumerationValueData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace) : 
+public class EnumerationValueData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace) :
   BaseData(objectType, stream, encoding, fileName, Properties, trace)
 {
 

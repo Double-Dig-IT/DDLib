@@ -1,4 +1,4 @@
-﻿namespace DDigit.PowerShell;
+﻿namespace DDigit.Scripting.CommandLets;
 
 [Cmdlet(VerbsCommon.Search, AdlibNouns.Adlib)]
 public class SearchAdlib : DDCmdlet
@@ -7,7 +7,7 @@ public class SearchAdlib : DDCmdlet
   /// The database for which to search
   /// </summary>
   [Parameter(Mandatory = true)]
-  public string? Database
+  public required string Database
   {
     get; set;
   }
@@ -16,7 +16,7 @@ public class SearchAdlib : DDCmdlet
   /// The database for which to search
   /// </summary>
   [Parameter(Mandatory = true)]
-  public string? Statement
+  public required string Statement
   {
     get; set;
   }
@@ -48,20 +48,34 @@ public class SearchAdlib : DDCmdlet
     get; set;
   }
 
+  /// <summary>
+  /// Perform the search asynchronously
+  /// </summary>
   protected override void ProcessRecord()
   {
-    provider.MilestoneReached += DataProvider_MilestoneChanged;
-
-    async Task Search()
-    {
-      Result = await provider.Search(WorkingDirectory, Database!, Dataset, Statement!, Results, Milestone);
-    }
-
-    RunAsyncTask(Search);
+    Result = RunWithEvent(
+        () => provider.MilestoneReached += DataProvider_MilestoneChanged,
+        () => provider.SearchAsync(WorkingDirectory, Database, Dataset, Statement, Results, Milestone, default),
+        () => provider.MilestoneReached -= DataProvider_MilestoneChanged
+    );
 
     if (SessionState != null)
     {
       WriteObject(Result);
     }
+  }
+
+  public static ResultSet? Search(string folder, string database, string statement)
+  { 
+    var task = SearchAsync(folder, database, statement);
+    task.Wait();
+    var result = task.Result;
+    return result;
+  }
+
+  public async static Task<ResultSet?> SearchAsync(string folder, string database, string statement)
+  {
+    var provider = new DDataProvider(new MSSqlRepository());
+    return await provider.SearchAsync(folder, database, null, statement, null, 1000, default);
   }
 }
