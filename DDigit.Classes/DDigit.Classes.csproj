@@ -1,10 +1,14 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Authors>Daan Kuijper, Bert Degenhart Drenth</Authors>
+    <Company>Double Dig IT</Company>
+    <Copyright>(C) 2026 Double Dig IT</Copyright>
+    <Description>Contains the Classes for Double Dig IT Core Libraries.</Description>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.PowerShell.Commands.Diagnostics" Version="7.5.4" />

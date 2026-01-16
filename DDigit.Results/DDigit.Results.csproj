@@ -6,6 +6,10 @@
     <Nullable>enable</Nullable>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <Authors>Daan Kuijper, Bert Degenhart Drenth</Authors>
+    <Company>Double Dig IT</Company>
+    <Copyright>(C) 2026 Double Dig IT</Copyright>
+    <Description>Contains the Result Type for Double Dig IT Core Libraries.</Description>
   </PropertyGroup>
 
 </Project>
