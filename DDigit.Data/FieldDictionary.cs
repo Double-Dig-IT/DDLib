@@ -13,12 +13,8 @@ internal class FieldDictionary : ConcurrentDictionary<string, OccurrenceList>
   }
 
 
-  internal OccurrenceList FindOrCreateOccurrenceList(string? tag)
+  internal OccurrenceList FindOrCreateOccurrenceList(string tag)
   {
-    if (tag == null)
-    {
-      throw new NullReferenceException(nameof(tag));
-    }
     if (!TryGetValue(tag, out var occurrences))
     {
       occurrences = this[tag] = [];

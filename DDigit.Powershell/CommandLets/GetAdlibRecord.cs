@@ -1,7 +1,4 @@
-﻿using DDigit.Classes;
-using DDigit.Exceptions;
-
-namespace DDigit.Scripting;
+﻿namespace DDigit.Scripting.CommandLets;
 
 /// <summary>
 /// Get a single record
@@ -59,7 +56,7 @@ public class GetAdlibRecord : DDCmdlet
     var provider = new DDataProvider(new MSSqlRepository());
     var databaseData = provider.GetDatabase(folder, database) ??
       throw new DatabaseNotFoundException(folder, database);
-    var task = provider.ReadRecordAsync(databaseData, id, null, null, default);
+    var task = provider.ReadRecordAsync(databaseData, id);
     task.Wait();
     var record = task.Result;
     return record;

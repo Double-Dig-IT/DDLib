@@ -1,6 +1,4 @@
-﻿using DDigit.Search;
-
-namespace DDigit.Scripting;
+﻿namespace DDigit.Scripting.CommandLets;
 
 /// <summary>
 /// Show the fields of a set of records
@@ -96,7 +94,7 @@ public class ShowAdlibRecordSet : DDCmdlet
       {
         if (field != null)
         {
-          responseObject.Members.Add(new PSNoteProperty(field, record.GetAsync(field, 1, Language, null, null, default)));
+          responseObject.Members.Add(new PSNoteProperty(field, record.GetAsync(field, 1, Language)));
         }
       }
       if (SessionState != null)

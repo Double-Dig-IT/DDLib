@@ -1,7 +1,7 @@
 ﻿namespace DDigit.MetaData;
 
-public class ConnectEntityData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace) :
-  BaseData(objectType, stream, encoding, fileName, Properties, trace)
+public class ConnectEntityData(ObjectTypeEnum objectType, FileStream stream, Encoding encoding, bool trace) :
+  BaseData(objectType, stream, encoding, Properties, trace)
 {
   public string Id
   {
@@ -23,13 +23,19 @@ public class ConnectEntityData(ObjectTypeEnum objectType, Stream stream, Encodin
     get; private set;
   }
 
-  public List<LanguageTextData> Texts
+  /// <summary>
+  /// Labels for this connection entity
+  /// </summary>
+  public TextsList Texts
   {
     get;
   } = [];
 
 
-  public List<AccessRightsData> Rights
+  /// <summary>
+  /// Access Rights for this connection
+  /// </summary>
+  public AccessControlList Rights
   {
     get;
   } = [];
@@ -47,9 +53,9 @@ public class ConnectEntityData(ObjectTypeEnum objectType, Stream stream, Encodin
     new PropertyMap (4,  DataTypesEnum.String,  "DestinationField"),
   ];
 
-  internal override (PropertyList, IEnumerable<object>)[] Children =>
+  internal override ChildrenList[] Children =>
   [
-    (LanguageTextData.Properties, Texts),
-    (AccessRightsData.Properties, Rights),
+    new ChildrenList(Texts, LanguageTextData.Properties),
+    new ChildrenList(Rights, AccessRightsData.Properties),
   ];
 }

@@ -1,9 +1,19 @@
 ﻿namespace DDigit.MetaData;
 
-public class ApplicationFeatureData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace) :
-             BaseData(objectType, stream, encoding, fileName, Properties, trace)
+/// <summary>
+/// A feature of an application
+/// </summary>
+/// <param name="objectType"></param>
+/// <param name="stream"></param>
+/// <param name="encoding"></param>
+/// <param name="trace"></param>
+public class ApplicationFeatureData(ObjectTypeEnum objectType, FileStream stream, Encoding encoding, bool trace) :
+             BaseData(objectType, stream, encoding, Properties, trace)
 {
 
+  /// <summary>
+  /// The feature
+  /// </summary>
   public FeatureTypeEnum FeatureType
   {
     get; 
@@ -13,9 +23,10 @@ public class ApplicationFeatureData(ObjectTypeEnum objectType, Stream stream, En
   /// <summary>
   /// A list of access rights.
   /// </summary>
-  public List<AccessRightsData> AccessRights
+  public AccessControlList AccessRights
   {
-    get; private set;
+    get; 
+    private set;
   } = [];
 
   internal static readonly PropertyList Properties =

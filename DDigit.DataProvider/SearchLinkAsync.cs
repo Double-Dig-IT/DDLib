@@ -2,8 +2,8 @@
 
 public partial class DDataProvider
 {
-  public async Task<List<Record>> SearchLinksAsync(DatabaseData database, string fieldName, string searchValue, 
-    int startFrom, int limit, Record? record = null, int occ = 1)
+  public async Task<List<Record>> SearchLinksAsync(DatabaseData database, string fieldName, string searchValue,
+    int startFrom, int limit, Record? record, int occ, SqlStateInfo sqlState)
   {
     var field = database.FindFieldByTagOrName(fieldName) ?? throw new FieldNotFoundException(fieldName, database.Name);
     if (!field.IsLinked)
@@ -21,24 +21,34 @@ public partial class DDataProvider
     var limits = new SearchLimits(startFrom, limit); // Default start from the first record, limit to 100 records
     var domain = field.LinkDomain; // Pick up the right domain for the search, if any
 
-    if (string.IsNullOrEmpty(domain))
+    if (string.IsNullOrEmpty(domain) && !string.IsNullOrEmpty(field.LinkDomainTag))
     {
       if (record == null)
       {
         throw new DDException($"Field '{fieldName}' from '{database.Name}' requires a record to search links, but no record was provided.");
       }
-      if (string.IsNullOrEmpty(field.LinkDomainTag))
-      {
-        throw new DDException($"Field '{fieldName}' from '{database.Name}' requires a link  domain tag, but none was provided.");
-      }
-      domain = record.Get(field.LinkDomainTag, occ, null, null, default);
+      domain = await record.GetAsync(field.LinkDomainTag, occ, sqlState);
       if (string.IsNullOrEmpty(domain))
       {
         throw new DDException($"Field '{fieldName}' from '{database.Name}' has no value for the link domain tag '{field.LinkDomainTag}' in the provided record.");
-      } 
+      }
     }
 
-    var ids = await Repository.SearchLinksAsync(linkedDatabase, linkedDataset, field, searchValue, domain, limits);
-    return await ReadRecords(field.LinkedDatabase, ids);
+    var ids = await Repository.SearchLinksAsync(linkedDatabase, linkedDataset, field, searchValue, domain, limits, sqlState);
+    return await ReadRecordsAsync(field.LinkedDatabase, ids, sqlState);
+  }
+
+  protected async Task<List<Record>> ReadRecordsAsync(DatabaseData database, IEnumerable<int> ids, SqlStateInfo sqlState)
+  {
+    var result = new List<Record>();
+    foreach (var id in ids)
+    {
+      var record = await ReadRecordAsync(database, id, sqlState);
+      if (record != null)
+      {
+        result.Add(record);
+      }
+    }
+    return result;
   }
 }

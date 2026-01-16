@@ -1,15 +1,29 @@
 ﻿namespace DDigit.MetaData;
 
+/// <summary>
+/// Summary (basic fields) from FieldData.
+/// </summary>
 public class FieldDData : BaseData
 {
 
-  public FieldDData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, PropertyList properties, bool trace) :
-    base(objectType, stream, encoding, fileName, properties, trace)
+  /// <summary>
+  /// Constructor to read the binary information from a stream.
+  /// </summary>
+  /// <param name="objectType"></param>
+  /// <param name="stream"></param>
+  /// <param name="encoding"></param>
+  /// <param name="properties"></param>
+  /// <param name="trace"></param>
+  public FieldDData(ObjectTypeEnum objectType, FileStream stream, Encoding encoding, IReadOnlyList<PropertyMap> properties, bool trace) :
+    base(objectType, stream, encoding, properties, trace)
   {
 
   }
 
-  internal FieldDData() : base(ObjectTypeEnum.Field, string.Empty)
+  /// <summary>
+  /// Constructor to create a brand new field.
+  /// </summary>
+  internal FieldDData() : base(ObjectTypeEnum.Field)
   {
 
   }
@@ -46,7 +60,7 @@ public class FieldDData : BaseData
   /// <summary>
   /// A list with all field names
   /// </summary>
-  public TextsList Names
+  public FieldNameList Names
   {
     get;
     internal set;
@@ -57,11 +71,38 @@ public class FieldDData : BaseData
   /// </summary>
   public bool IsRepeated
   {
-    get; protected set;
+    get; set;
   }
 
-  public string? FieldName(string language) => Names[Languages.GetAdlibNo(language)]?.Text;
-    
+  /// <summary>
+  /// Validate if the field is repeated.
+  /// </summary>
+  /// <param name="occ"></param>
+  /// <exception cref="FieldIsNotRepeatedException"></exception>
+  public void ValidateOccurrence(int occ)
+  {
+    if (occ < 1)
+    {
+      throw new InvalidOccurrenceException(Name, occ);
+    }
 
+    if (occ > 1 && !IsRepeated)
+    {
+      throw new FieldIsNotRepeatedException(Name, occ);
+    }
+  }
+
+  /// <summary>
+  /// Get the field name in a specific language.
+  /// </summary>
+  /// <param name="language">ISO code of the language</param>
+  /// <returns>Field name</returns>
+  public string? FieldName(string language) => Names[Languages.GetAdlibNo(language)]?.Text;
+
+
+  /// <summary>
+  /// Default ToString method.
+  /// </summary>
+  /// <returns>Tag + Name</returns>
   public override string ToString() => $"{Tag} {Name}";
 }

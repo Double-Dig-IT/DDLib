@@ -19,18 +19,7 @@ internal class SqlBuilder
   }
 
   private static void AddColumToWhereClause(StringBuilder sql, int i, string column, SearchOperatorEnum op, string term)
-  {
-    sql.Append($"{column}");
-    if (term == "*")
-    {
-      sql.Append(" is not null ");
-    }
-    else
-    {
-      sql.Append(SqlSearchOperator(op, term));
-      sql.Append($"@term{i}");
-    }
-  }
+   => sql.Append($"{column} {(term == "*" ? "is not null " : $"{SqlSearchOperator(op, term)} @term{i}")}");
 
   private static void AddWhereClause(StringBuilder sql, SearchTreeLeaf leaf, string column)
   {
@@ -252,12 +241,12 @@ internal class SqlBuilder
     }
   }
 
-  private static readonly char[] separators = [' ', ',', '\'', '\"'];
-
   internal static List<string> GetFreeTextSearchWords(string? value)
   {
+    char[] separators = [' ', ',', '\'', '\"'];
+
     var result = value != null ?
-     value.Split(separators, StringSplitOptions.RemoveEmptyEntries) : [];
+       value.Split(separators, StringSplitOptions.RemoveEmptyEntries) : [];
     return [.. result.Select(MaxLength)];
   }
 
@@ -440,12 +429,31 @@ internal class SqlBuilder
 
   internal static string SelectData(string table) => $"select data from {table} where priref = @id";
 
-  internal static string GetSetData(string table, string? searchTerms)
+  internal static string GetSetData(string table, string? searchTerms, RecordSetSortEnum? sort, bool descending = false)
   {
     var sql = new StringBuilder($"select * from {RecordSetMetaDataTable(table)}");
     if (!string.IsNullOrWhiteSpace(searchTerms))
     {
       sql.Append($" where [title] like @term or [selectionStatement] like @term or [owner] like @term");
+    }
+    if (sort is not null)
+    {
+      var col = sort switch
+      {
+        RecordSetSortEnum.Number => "pfnumber",
+        RecordSetSortEnum.Title => "title",
+        RecordSetSortEnum.Owner => "owner",
+        RecordSetSortEnum.Selection => "selection",
+        RecordSetSortEnum.Hits => "hitcount",
+        RecordSetSortEnum.Created => "creation",
+        RecordSetSortEnum.Modified => "modification",
+        _ => throw new NotImplementedException($"{nameof(RecordSetSortEnum)}.{sort}")
+      };
+      sql.Append($" order by [{col}]");
+      if (descending)
+      {
+        sql.Append(" desc");
+      }
     }
     return sql.ToString();
   }
@@ -642,7 +650,7 @@ internal class SqlBuilder
     var remoteIndexTable = linkedFieldData.PreferredIndex!.TableName;
     var nonPreferredTable = fieldData.UseFieldData?.PreferredIndex?.TableName;
 
-    if (linkedDatabase.FullText)
+    if (linkedDatabase.IsFullTextEnabled)
     {
       var table = linkedDatabase.FullTextTable;
       sql.Append($"select distinct term, '' as [use], count(priref) as hits from ");
@@ -693,21 +701,30 @@ internal class SqlBuilder
     }
   }
 
-  internal static string FindLink(string table, string? domain, string? language, DatasetData? dataset)
+  internal static string FindLink(string table, string? tag, string? domain, bool isMultiLingual, string? language, DatasetData? dataset)
   {
     var sql = new StringBuilder($"select priref from [{table}] where term = @term");
-    if (domain != null)
+
+    if (tag is not null)
+    {
+      sql.Append($" and tag = @tag");
+    }
+
+    if (domain is not null)
     {
       sql.Append($" and domain = @domain");
     }
-    if (language != null)
+
+    if (isMultiLingual && language is not null)
     {
       sql.Append($" and language = @language");
     }
-    if (dataset != null)
+
+    if (dataset is not null)
     {
       sql.Append($" and priref between @lower and @upper");
     }
+
     return sql.ToString();
   }
 
@@ -725,7 +742,7 @@ internal class SqlBuilder
         var tag = fieldData.LinkDomainTag;
         var databaseData = fieldData.Database ?? throw new NullReferenceException(nameof(fieldData.Database));
         var domainFieldData = databaseData.FindFieldByTagOrName(tag) ?? throw new FieldNotFoundException(tag, databaseData.Name);
-        if (domainFieldData.Enumeration)
+        if (domainFieldData.IsEnumeration)
         {
           domains.AddRange(domainFieldData.EnumKeys("", null));
         }
@@ -750,15 +767,10 @@ internal class SqlBuilder
 
   internal static string DeleteDateKey(string table) => $"delete from [{table}] where term = @term and priref = @id";
 
-  internal static string DeleteIsoDateKey(string table)
-  {
-    throw new NotImplementedException();
-  }
+  internal static string DeleteIsoDateKey(string table) => $"delete from [{table}] where term = @term and priref = @id";
 
-  internal static string InsertIsoDateKey(string table)
-  {
-    throw new NotImplementedException();
-  }
+  internal static string InsertIsoDateKey(string table) =>
+    $"insert into [{table}] (term, displayTerm, priref) values (@term, @displayTerm, @id)";
 
   internal static string InsertAlphanumericKey(string table) =>
     $"insert into [{table}] (term, displayTerm, priref) values (@key, @displayTerm, @id)";
@@ -823,5 +835,20 @@ internal class SqlBuilder
 
     output @prefix + cast(inserted.[counter] as varchar) + @suffix;
     """";
+
+  internal static string GetSetMetaData(string table) =>
+    $""""
+     select * from {RecordSetMetaDataTable(table)} where pfnumber = @number
+     """";
+
+  internal static string AddToRecordSet(string table) =>
+    $""""
+     insert into {RecordSetHitsTable(table)} (pfnumber, priref) values (@number, @id)
+     """";
+
+  internal static string RemoveFromRecordSet(string table)
+  => $""""
+     delete from {RecordSetHitsTable(table)} where pfnumber = @number and priref = @id
+     """";
 }
- 
+

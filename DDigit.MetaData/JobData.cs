@@ -1,21 +1,42 @@
 ﻿namespace DDigit.MetaData;
 
-public class JobData : BaseData
+/// <summary>
+/// Base class for output and export jobs
+/// </summary>
+public class JobData : BaseData, IHasFields
 {
-  public JobData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace)
-    : base(objectType, stream, encoding, fileName, Properties, trace)
+  /// <summary>
+  /// Contructor that reads JobData from a file.
+  /// </summary>
+  /// <param name="objectType"></param>
+  /// <param name="stream"></param>
+  /// <param name="encoding"></param>
+  /// <param name="trace"></param>
+  public JobData(ObjectTypeEnum objectType, FileStream stream, Encoding encoding, bool trace)
+    : base(objectType, stream, encoding, Properties, trace)
   {
   }
 
-  public JobData(ObjectTypeEnum objectType) : base(objectType, Properties)
+  /// <summary>
+  /// Constructor to create an empty job.
+  /// </summary>
+  /// <param name="objectType"></param>
+  public JobData(ObjectTypeEnum objectType) 
+    : base(objectType, Properties)
   {
   }
 
+  /// <summary>
+  /// The adapl that is used to create the output.
+  /// </summary>
   public string Adapl
   {
     get; set;
   } = "";
 
+  /// <summary>
+  /// An (XSLT) template that is used to create the output.
+  /// </summary>
   public string Template
   {
     get; set;
@@ -24,9 +45,9 @@ public class JobData : BaseData
   /// <summary>
   /// The title of the job
   /// </summary>
-  public string? Title
+  public string Title
   {
-    get => Texts[0].Text;
+    get => Texts.Count > 0 ? Texts[0].Text ?? "" : "";
     set
     {
       if (Texts.Count > 0)
@@ -40,11 +61,17 @@ public class JobData : BaseData
     }
   }
 
+  /// <summary>
+  /// Any comments about the job.
+  /// </summary>
   public string Comment
   {
     get; protected set;
   } = "";
 
+  /// <summary>
+  /// The type of template 
+  /// </summary>
   public TemplateTypeEnum TemplateType
   {
     get; set;
@@ -58,31 +85,69 @@ public class JobData : BaseData
     get; set;
   } = "";
 
+  /// <summary>
+  /// The type of XML to generate the output
+  /// </summary>
   public XmlTypeEnum XmlType
   {
     get; protected set;
   }
 
+  /// <summary>
+  /// A web service url that is used for printing.
+  /// </summary>
   public string PrintServiceUrl
   {
     get; protected set;
   } = "";
 
+  /// <summary>
+  /// A screen that allows input of parameters for this job.
+  /// </summary>
+  public string ParametersScreen
+  {
+    get; 
+    protected set;
+  } = "";
+
+  /// <summary>
+  /// A list of Texts (Titles) for the job.
+  /// </summary>
   public TextsList Texts
   {
     get; private set;
   } = [];
 
-  public List<LanguageTextData> Descriptions
+  /// <summary>
+  /// A list of descriptions that is explaining the job's use
+  /// in various languages.
+  /// </summary>
+  public TextsList Descriptions
   {
     get; private set;
   } = [];
 
-  public List<AccessRightsData> AccessRights
+  /// <summary>
+  /// A list of access rights (ACL) for this job. 
+  /// </summary>
+  public AccessControlList AccessRights
   {
     get; private set;
   } = [];
 
+  /// <summary>
+  /// FieldList for parameters for this output job
+  /// </summary>
+  public FieldList Fields
+  { 
+    get;
+    set;
+  } = []; 
+
+  /// <summary>
+  /// ToString() Override, handy for debugging, returns the English title.
+  /// </summary>
+  /// <returns></returns>
   public override string? ToString() => Title;
 
   internal static PropertyList Properties =
@@ -99,13 +164,15 @@ public class JobData : BaseData
     new PropertyMap (9,  DataTypesEnum.String,  "Templates"),
     new PropertyMap (10, DataTypesEnum.Enum,    "XmlType", typeof (XmlTypeEnum)),
     new PropertyMap (11, DataTypesEnum.Skip),
-    new PropertyMap (12, DataTypesEnum.String,  "PrintServiceUrl")
+    new PropertyMap (12, DataTypesEnum.String,  "PrintServiceUrl"),
+    new PropertyMap (13, DataTypesEnum.String,  "ParametersScreen")
   ];
 
-  internal override (PropertyList, IEnumerable<object>)[] Children =>
+  internal override ChildrenList[] Children =>
   [
-    (AccessRightsData.Properties, AccessRights),
-    (LanguageTextData.Properties, Texts),
-    (LanguageTextData.Properties, Descriptions)
+    new ChildrenList(AccessRights, AccessRightsData.Properties),
+    new ChildrenList(Texts, LanguageTextData.Properties),
+    new ChildrenList(Descriptions, LanguageTextData.Properties),
+    new ChildrenList(Fields, FieldData.Properties)
   ];
 }

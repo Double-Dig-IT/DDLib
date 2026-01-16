@@ -18,18 +18,18 @@ public partial class DDataProvider : IDataProvider
       Unique = unique,
       PreviousResults = results,
       DatasetFilter = datasets != null ? new DatasetFilter(databaseData, datasets) : null,
-      Cancellation = cancellationToken,
+      SqlState = new SqlStateInfo { Connection = null, Transaction = null, CancellationToken = cancellationToken },
     };
    
-    if (results != null)
+    if (results is not null)
     {
       return results.Randomize(searchTree);
     }
 
-    if (databaseData != null)
+    if (databaseData is not null)
     {
       var statement = new StringBuilder($"all random {sampleSize}");
-      if (seed != null)
+      if (seed is not null)
       {
         statement.Append($" seed {seed}");
       }

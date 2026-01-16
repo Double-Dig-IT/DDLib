@@ -1,6 +1,4 @@
-﻿using DDigit.Search;
-
-namespace DDigit.Scripting;
+﻿namespace DDigit.Scripting.CommandLets;
 
 /// <summary>
 /// Get a random sample from a database or record set
@@ -67,7 +65,7 @@ public class GetAdlibRandomRecord : DDCmdlet
   {
     provider.MilestoneReached += DataProvider_MilestoneChanged;
 
-    Result = await provider.RandomSample(WorkingDirectory, Database, Dataset, Results, Sample, Seed, Unique, CancellationToken.None);
+    Result = await provider.RandomSample(WorkingDirectory, Database!, Dataset, Results, Sample, Seed, Unique, CancellationToken.None);
     if (SessionState != null)
     {
       WriteObject(Result);

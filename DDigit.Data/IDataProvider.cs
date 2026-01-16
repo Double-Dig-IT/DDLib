@@ -8,16 +8,16 @@ public interface IDataProvider
 
   event EventHandler<MilestoneEventArgs>? MilestoneReached;
 
-  Task<Record?> ReadRecordAsync(DatabaseData database, int id,
-                                IDbConnection? connection, 
-                                IDbTransaction? transaction,
-                                CancellationToken cancellationToken);
+  Task<Record?> ReadRecordAsync(DatabaseData database, int id, SqlStateInfo sqlState);
 
-  Task WriteRecordAsync(Record record, IDbConnection? connection, IDbTransaction? transaction, CancellationToken cancellationToken);
+  Task<Record?> ReadRecordAsync(DatabaseData database, int id, CancellationToken cancellationToken);
+
+  Task<Record?> ReadRecordAsync(string folder, string database, int id, CancellationToken cancellationToken);
+
+  Task WriteRecordAsync(Record record, SqlStateInfo sqlState, RecordWriteOptionsFlag? writeOptions = RecordWriteOptionsFlag.None);
 
   ResultSet JoinRecordSet(ResultSet left, BooleanOperator @operator, ResultSet right);
 
-  Task<Record?> ReadRecordAsync(string folder, string database, int id, CancellationToken cancellationToken);
 
   Task<ResultSet?> FindRecordSet(string folder, string database, IEnumerable<string>? dataset, string fieldOrTag, string? language,
                                  string value, ResultSet? results, CancellationToken cancellationToken);
@@ -30,8 +30,8 @@ public interface IDataProvider
 
   Task<IEnumerable<RecordLock>> GetRecordLock(string Folder);
 
-  Task<RecordSetList> GetRecordSetMetaDataAsync(string folder, string? databaseName, HashSet<int>? sets, 
-                                                     string? searchTerm, int startFrom, int limit, CancellationToken cancellationToken);
+  Task<RecordSetList> GetRecordSetMetaDataAsync(string folder, string? databaseName, HashSet<int>? sets,
+                                                string? searchTerm, int startFrom, int limit, RecordSetSortEnum? sort, SearchSortOrderEnum? sortOrder, CancellationToken cancellationToken);
 
   void SetUser(string workingDirectory, string user, string? role, string? password);
 
@@ -74,6 +74,5 @@ public interface IDataProvider
   Task RemoveRecord(string folder, string database, int id, CancellationToken cancellationToken);
 
   Task DeleteRecordAsync(Record record, CancellationToken cancellationToken);
-  Task <string> GetAutoNumberValue(IDbConnection connection, IDbTransaction transaction,
-                            FieldData fieldData, CancellationToken cancellationToken);
+  Task<string> GetAutoNumberValue(FieldData fieldData, SqlStateInfo sqlState);
 }

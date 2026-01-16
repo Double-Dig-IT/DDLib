@@ -37,7 +37,7 @@ public class GetAdlibAutoComplete : DDCmdlet
   public string? Value
   {
     get; set;
-  } = string.Empty;
+  } = "";
 
   /// <summary>
   /// The first suggestion to show

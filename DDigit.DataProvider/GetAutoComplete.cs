@@ -1,7 +1,4 @@
-﻿
-using Microsoft.Data.SqlClient;
-
-namespace DDigit.DataProvider;
+﻿namespace DDigit.DataProvider;
 
 public partial class DDataProvider : IDataProvider
 {

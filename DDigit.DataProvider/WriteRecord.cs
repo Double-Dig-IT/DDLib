@@ -1,54 +1,230 @@
-﻿using DDigit.ScriptingLibrary;
-using System.Diagnostics;
-using System.Runtime.ExceptionServices;
-
-namespace DDigit.DataProvider;
+﻿namespace DDigit.DataProvider;
 
 public partial class DDataProvider : IDataProvider
 {
-  public async Task WriteRecordAsync(Record record,
-                                     IDbConnection? connection = null,
-                                     IDbTransaction? transaction = null,
-                                     CancellationToken cancellationToken = default)
+  public async Task WriteRecordAsync(Record record, SqlStateInfo sqlState, RecordWriteOptionsFlag? writeOptions = RecordWriteOptionsFlag.None)
   {
     var databaseData = record.Database ?? throw new NullReferenceException(nameof(record.Database));
     var table = record.Database.Name ?? throw new NullReferenceException(nameof(record.Database.Name));
-    var fullTextTable = databaseData.FullText ? databaseData.FullTextTable : null;
-    var currentConnection = connection ?? await Repository.GetDbConnectionAsync(record.Database);
-    var currentTransaction = transaction ?? await Repository.StartTransactionAsync(currentConnection);
+    var fullTextTable = databaseData.IsFullTextEnabled ? databaseData.FullTextTable : null;
+
+    var createdConnection = sqlState.Connection == null;
+    var createdTransaction = sqlState.Transaction == null;
+
+    sqlState.Connection ??= await Repository.GetDbConnectionAsync(record.Database);
+    sqlState.Transaction ??= await Repository.StartTransactionAsync(sqlState.Connection);
 
     // This saves the exception in the try catch block and throws it later.
     ExceptionDispatchInfo? capturedException = null;
 
+    async Task<int> WriteIndexDataAsync()
+    {
+      async Task<int> WriteChangesAsync(IndexRow indexRow)
+         => indexRow.Count switch
+         {
+           > 0 => indexRow switch
+           {
+             IntegerIndexRow integerRow => await Repository.AddIndexKeyAsync(integerRow, sqlState),
+             TermIndexRow termRow => await Repository.AddIndexKeyAsync(fullTextTable, termRow, sqlState),
+             IsoDateIndexRow isoDateRow => await Repository.AddIndexKeyAsync(isoDateRow, sqlState),
+             DateIndexRow dateRow => await Repository.AddIndexKeyAsync(dateRow, sqlState),
+             BooleanIndexRow booleanRow => await Repository.AddIndexKeyAsync(booleanRow, sqlState),
+             AlphaNumericIndexRow alphaNumericRow => await Repository.AddIndexKeyAsync(fullTextTable, alphaNumericRow, sqlState),
+             _ => throw new NotImplementedException($"Unknown type {indexRow.GetType()} for data row"),
+           },
+           < 0 => indexRow switch
+           {
+             IntegerIndexRow integerRow => await Repository.DeleteIndexKeyAsync(integerRow, sqlState),
+             TermIndexRow termRow => await Repository.DeleteIndexKeyAsync(fullTextTable, termRow, sqlState),
+             IsoDateIndexRow isoDateRow => await Repository.DeleteIndexKeyAsync(isoDateRow, sqlState),
+             DateIndexRow dateRow => await Repository.DeleteIndexKeyAsync(dateRow, sqlState),
+             BooleanIndexRow booleanRow => await Repository.DeleteIndexKeyAsync(booleanRow, sqlState),
+             AlphaNumericIndexRow alphaNumericRow => await Repository.DeleteIndexKeyAsync(fullTextTable, alphaNumericRow, sqlState),
+             _ => throw new NotImplementedException($"Unknown type {indexRow.GetType()} for data row"),
+           },
+           _ => 0, // No changes to write
+         };
+
+      int result = 0;
+     
+      var indexChanges = await record.CreateIndexKeysAsync(sqlState);
+      foreach (var index in indexChanges)
+      {
+        foreach (var change in index.Where(change => change.Count != 0))
+        {
+          IndexData indexData = change.Index;
+          if (!indexData.TableExists.HasValue)
+          {
+            indexData.TableExists = Repository.CheckIndexTable(databaseData, indexData.TableName);
+          }
+          result += await WriteChangesAsync(change);
+        }
+      }
+      return result;
+    }
+
+    async Task AutomaticNumbering()
+    {
+      foreach (var fieldData in record.Database!.AutomaticNumberingFields!)
+      {
+        if (fieldData.AutoNumberAssignmentSource == AutoNumberingAllowManualAssignmentEnum.Yes &&
+               !string.IsNullOrWhiteSpace(await record.GetAsync(fieldData.Tag!, 1, sqlState)))
+        {
+          continue; // If the field is already set, skip auto-numbering
+        }
+        await record.SetAutoNumberValue(fieldData, sqlState);
+      }
+    }
+
+    async Task ProcessInternalLinkAsync(InternalLinkData internalLink)
+    {
+      async Task CheckLinkAsync(string? tag, string? relatedTag)
+      {
+        if (record.Database is not null && tag is not null && relatedTag is not null)
+        {
+          int maxOcc = record.RepCount(tag);
+          for (int occ = 1; occ <= maxOcc; occ++)
+          {
+            var relationId = await record.GetLinkIdAsync(tag, occ, sqlState);
+            {
+              if (relationId.HasValue)
+              {
+                var relatedRecord = await ReadRecordAsync(record.Database, relationId.Value, sqlState);
+                if (relatedRecord is not null && !await relatedRecord.LinkIdPresent(relatedTag, record.Id, sqlState))
+                {
+                  relatedRecord.Append(relatedTag, record.Id);
+                  await relatedRecord.WriteAsync(sqlState);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      async Task ProcessRelatedAsync(InternalLinkData internalLink)
+      {
+        var tag = internalLink.RelatedTermLinkIdTag;
+        if (tag is not null)
+        {
+          int maxOcc = record.RepCount(tag);
+          for (int occ = 1; occ <= maxOcc; occ++)
+          {
+            var relationId = await record.GetLinkIdAsync(tag, occ, sqlState);
+          }
+        }
+      }
+
+      async Task ProcessEquivalentAsync(InternalLinkData internalLink)
+      {
+        var tag = internalLink.EquivalentTermLinkIdTag;
+        if (tag is not null)
+        {
+          int maxOcc = record.RepCount(tag);
+          for (int occ = 1; occ <= maxOcc; occ++)
+          {
+            var relationId = await record.GetLinkIdAsync(tag, occ, sqlState);
+          }
+        }
+      }
+
+      async Task ProcessSemanticFactorAsync(InternalLinkData internalLink)
+      {
+        throw new NotImplementedException();
+      }
+
+      switch (internalLink.RelationType)
+      {
+        case RelationTypeEnum.Hierarchical:
+          var broader = string.IsNullOrWhiteSpace(internalLink.BroaderTermLinkIdTag) ? internalLink.BroaderTermTag : internalLink.BroaderTermLinkIdTag;
+          var narrower = string.IsNullOrWhiteSpace(internalLink.NarrowerTermLinkIdTag) ? internalLink.NarrowerTermTag : internalLink.NarrowerTermLinkIdTag;
+          await CheckLinkAsync(broader, narrower);
+          await CheckLinkAsync(narrower, broader);
+          break;
+
+        case RelationTypeEnum.Related:
+          await ProcessRelatedAsync(internalLink);
+          break;
+
+        case RelationTypeEnum.Equivalence:
+          await ProcessEquivalentAsync(internalLink);
+          break;
+
+        // Pesudonyms are treated in the same way as preferred / non-preferred
+        case RelationTypeEnum.Pseudonym:
+        case RelationTypeEnum.Preference:
+          var use = string.IsNullOrWhiteSpace(internalLink.UseTermLinkIdTag) ? internalLink.UseTermTag : internalLink.UseTermLinkIdTag;
+          var usedFor = string.IsNullOrWhiteSpace(internalLink.UsedForTermLinkIdTag) ? internalLink.UsedForTermTag : internalLink.UsedForTermLinkIdTag;
+          await CheckLinkAsync(use, usedFor);
+          await CheckLinkAsync(usedFor, use);
+          break;
+
+        case RelationTypeEnum.SemanticFactor:
+          await ProcessSemanticFactorAsync(internalLink);
+          break;
+
+        default:
+          throw new NotImplementedException();
+      }
+    }
+
+    static void RunScript(Record record, ScriptTriggerCodeEnum triggerCode)
+    {
+      var script = record.Database?.BeforeStoragePythonScript;
+      if (!string.IsNullOrWhiteSpace(script))
+      {
+        ScriptHelper.RunPython(script, record, triggerCode, Console.WriteLine);
+        return;
+      }
+
+      script = record.Database?.BeforeStoragePowerShellScript;
+      if (!string.IsNullOrWhiteSpace(script))
+      {
+        // TODO: Add trigger code and console output
+        ScriptHelper.RunPowerShell(script, record);
+      }
+    }
+
     try
     {
-      await AutomaticNumbering(currentConnection, currentTransaction, record, cancellationToken);
-      RunScript(record, ScriptTriggerCodeEnum.BeforeStorage);
-
-      RecordMetaData.SetInputEditMetaData(record);
-
-      await record.ResolveLinksAsync(currentConnection, currentTransaction, cancellationToken);
-      if (record.Id == 0)
+      if ((writeOptions & RecordWriteOptionsFlag.NoAutoNumbering) == 0)
       {
-        record.Id = await Repository.GetNewRecordIdAsync(currentConnection, currentTransaction, record.Database, record.Dataset);
-        record.Original = null;
+        await AutomaticNumbering();
+      }
 
-        var data = record.Serialize().ToString();  // BDD: it's easier to keep a variable here for debugging purposes 
+      if ((writeOptions & RecordWriteOptionsFlag.NoScripts) == 0)
+      {
+        RunScript(record, ScriptTriggerCodeEnum.BeforeStorage);
+      }
 
-        await Repository.WriteNewDataAsync(table, record.Id, record.Creation,
-                                             record.Modification, data,
-                                             currentConnection, currentTransaction, cancellationToken);
+      if ((writeOptions & RecordWriteOptionsFlag.NoEditHistory) == 0)
+      {
+        RecordMetaData.SetInputEditMetaData(record);
+      }
 
+      await record.ResolveLinksAsync(sqlState);
+
+      if (record.Id == 0)  // new record
+      {
+        record.Id = await Repository.GetNewRecordIdAsync(record.Database, record.Dataset, sqlState);
+      }
+
+      // Any records changes due to file uploads happen here,
+      // But the resolving of ExternalResources gets executed after successfull database write
+      var externalResources = (writeOptions & RecordWriteOptionsFlag.NoFilesUpload) == 0 ?
+        await ResolveExternalResources.ResolveAsync(record, sqlState) : [];
+
+      var data = record.Serialize().ToString();  // BDD: it's easier to keep a variable here for debugging purposes 
+      record.Original = await ReadRecordAsync(record.Database, record.Id, sqlState);
+      if (record.Original is null)
+      {
+        await Repository.WriteNewDataAsync(table, record.Id, record.Creation, record.Modification, data, sqlState);
       }
       else
       {
-        record.Original = await ReadRecordAsync(record.Database, record.Id,
-                                                currentConnection, currentTransaction, cancellationToken);
-        await Repository.UpdateDataAsync(currentConnection, currentTransaction, table, record.Id,
-                                    record.Modification, record.Serialize().ToString(), cancellationToken);
+        await Repository.UpdateDataAsync(table, record.Id, record.Modification, data, sqlState);
       }
 
-      var rows = await WriteIndexDataAsync(currentConnection, currentTransaction, fullTextTable, record, cancellationToken);
+      var rows = await WriteIndexDataAsync();
 
       //rows = await WriteIndexedLinksDataAsync(currentConnection, currentTransaction, record, cancellationToken);
 
@@ -56,336 +232,74 @@ public partial class DDataProvider : IDataProvider
       // re-enabled the processing of internal links on 29/07/2025, this is needed for hierarchical links
       foreach (var internalLink in databaseData.InternalLinks)
       {
-        await ProcessInternalLinkAsync(currentConnection, currentTransaction, internalLink, record, cancellationToken);
+        await ProcessInternalLinkAsync(internalLink);
       }
 
-      await record.ProcessReverseLinksAsync(currentConnection, currentTransaction, cancellationToken);
-
-      if (transaction == null)
+      if (!sqlState.ProcessingReverseLinks)
       {
-        await Repository.CommitAsync(currentTransaction, cancellationToken);
+        await record.ProcessReverseLinksAsync(sqlState);
       }
-      if (connection == null)
+
+      foreach (var externalResource in externalResources)
       {
-        currentConnection?.Dispose();
+        await externalResource.ResolveAsync();
+      }
+
+      if (createdTransaction)
+      {
+        await Repository.CommitAsync(sqlState);
+      }
+
+      if (createdConnection)
+      {
+        var sqlConnection = (SqlConnection)sqlState.Connection;
+        await sqlConnection.CloseAsync();
+        await sqlConnection.DisposeAsync();
+        sqlState.Connection = null;
       }
 
       RunScript(record, ScriptTriggerCodeEnum.AfterStorage);
     }
     catch (Exception ex)
     {
-      if (transaction == null)
+      if (createdTransaction)
       {
         Debug.WriteLine(ex.ToString());
-        await Repository.RollbackAsync(currentTransaction, cancellationToken);
+        await Repository.RollbackAsync(sqlState);
       }
-      if (connection != null)
+
+      if (createdConnection && sqlState.Connection != null)
       {
-        currentConnection?.Dispose();
+        var sqlConnection = (SqlConnection)sqlState.Connection!;
+        await sqlConnection.CloseAsync();
+        await sqlConnection.DisposeAsync();
+        sqlState.Connection = null;
       }
 
       // Save the exception to be thrown later
       capturedException = ExceptionDispatchInfo.Capture(ex);
     }
 
+    record.ForceRelinks();
+
     // If an exception was captured, rethrow it
     capturedException?.Throw();
   }
 
-  private async static Task AutomaticNumbering(IDbConnection connection, IDbTransaction transaction,
-                                         Record record, CancellationToken cancellationToken)
+  private async Task<int> WriteIndexedLinksDataAsync(Record record, SqlStateInfo sqlState)
   {
-    foreach (var fieldData in record.Database!.AutomaticNumberingFields)
+    async Task<int> WriteIndexedLink(Record record, IndexedLinkData indexedLink, SqlStateInfo sqlState)
     {
-      if (fieldData.AutoNumberAssignment == AutoNumberAssignmentEnum.BeforeStorage ||
-          fieldData.AutoNumberAssignment == AutoNumberAssignmentEnum.DuringInputOrEdit)
-      {
-        if (fieldData.AutoNumberAssignmentSource == AutoNumberAssignmentSourceEnum.AllowManual &&
-               !string.IsNullOrWhiteSpace(await record.GetAsync(fieldData.Tag!, 1, cancellationToken:cancellationToken)))
-        { 
-          continue; // If the field is already set, skip auto-numbering
-        }
-        await record.SetAutoNumberValue(connection, transaction, fieldData, cancellationToken);
-      }
+      throw new NotImplementedException("WriteIndexedLink");
     }
-  }
 
-  private async Task<int> WriteIndexedLinksDataAsync(IDbConnection currentConnection, IDbTransaction currentTransaction, Record record, CancellationToken cancellationToken)
-  {
     int rows = 0;
     var databaseData = record.Database ?? throw new NullReferenceException(nameof(record.Database));
     foreach (var indexedLink in databaseData.IndexedLinks)
     {
-      rows += await WriteIndexedLink(indexedLink, currentConnection, currentTransaction, record, cancellationToken);
+      rows += await WriteIndexedLink(record, indexedLink, sqlState);
     }
     return rows;
-  }
-
-  private async Task<int> WriteIndexedLink(IndexedLinkData indexedLink, IDbConnection currentConnection, IDbTransaction currentTransaction,
-    Record record, CancellationToken cancellationToken)
-  {
-    throw new NotImplementedException("WriteIndexedLink");
-  }
-
-  private async Task ProcessInternalLinkAsync(IDbConnection connection, IDbTransaction transaction,
-                                                     InternalLinkData internalLink, Record record,
-                                                     CancellationToken cancellationToken)
-  {
-    switch (internalLink.RelationType)
-    {
-      case RelationTypeEnum.Hierarchical:
-        var broader = string.IsNullOrWhiteSpace(internalLink.BroaderTermLinkIdTag) ? internalLink.BroaderTermTag : internalLink.BroaderTermLinkIdTag;
-        var narrower = string.IsNullOrWhiteSpace(internalLink.NarrowerTermLinkIdTag) ? internalLink.NarrowerTermTag : internalLink.NarrowerTermLinkIdTag;
-        await CheckLinkAsync(record, broader, narrower, connection, transaction, cancellationToken);
-        await CheckLinkAsync(record, narrower, broader, connection, transaction, cancellationToken);
-        break;
-
-      case RelationTypeEnum.Related:
-        await ProcessRelatedAsync(record, internalLink, connection, transaction, cancellationToken);
-        break;
-
-      case RelationTypeEnum.Equivalence:
-        await ProcessEquivalentAsync(record, internalLink, connection, transaction, cancellationToken);
-        break;
-
-      case RelationTypeEnum.Preference:
-        var use = string.IsNullOrWhiteSpace(internalLink.UseTermLinkIdTag) ? internalLink.UseTermTag : internalLink.UseTermLinkIdTag;
-        var usedFor = string.IsNullOrWhiteSpace(internalLink.UsedForTermLinkIdTag) ? internalLink.UsedForTermTag : internalLink.UsedForTermLinkIdTag;
-        await CheckLinkAsync(record, use, usedFor, connection, transaction, cancellationToken);
-        await CheckLinkAsync(record, usedFor, use, connection, transaction, cancellationToken);
-        break;
-
-      case RelationTypeEnum.Pseudonym:
-        await ProcessPseudonymAsync(record, internalLink, connection, transaction, cancellationToken);
-        break;
-
-      case RelationTypeEnum.SemanticFactor:
-        await ProcessSemanticFactorAsync(record, internalLink, connection, transaction, cancellationToken);
-        throw new NotImplementedException();
-
-      default:
-        throw new NotImplementedException();
-    }
-  }
-
-  private async Task ProcessSemanticFactorAsync(Record record, InternalLinkData internalLink, IDbConnection connection, IDbTransaction transaction, CancellationToken cancellationToken)
-  {
-    return;
-  }
-
-  private async Task ProcessPseudonymAsync(Record record, InternalLinkData internalLink, IDbConnection connection, IDbTransaction transaction, CancellationToken cancellationToken)
-  {
-    return;
-  }
-
-  private static async Task ProcessPreferenceAsync(Record record, InternalLinkData internalLink,
-                                                   IDbConnection connection, IDbTransaction transaction, CancellationToken cancellationToken)
-  {
-    var tag = internalLink.UseTermLinkIdTag;
-    if (tag != null)
-    {
-      int maxOcc = record.RepCount(tag);
-      for (int occ = 1; occ <= maxOcc; occ++)
-      {
-        var relationId = await record.GetLinkIdAsync(tag, occ, connection, transaction, cancellationToken);
-      }
-    }
-
-    tag = internalLink.UsedForTermLinkIdTag;
-    if (tag != null)
-    {
-      int maxOcc = record.RepCount(tag);
-      for (int occ = 1; occ <= maxOcc; occ++)
-      {
-        var relationId = await record.GetLinkIdAsync(tag, occ, connection, transaction, cancellationToken);
-      }
-    }
-  }
-
-  private static async Task ProcessEquivalentAsync(Record record, InternalLinkData internalLink,
-                                                   IDbConnection connection, IDbTransaction transaction, CancellationToken cancellationToken)
-  {
-    var tag = internalLink.EquivalentTermLinkIdTag;
-    if (tag != null)
-    {
-      int maxOcc = record.RepCount(tag);
-      for (int occ = 1; occ <= maxOcc; occ++)
-      {
-        var relationId = await record.GetLinkIdAsync(tag, occ, connection, transaction, cancellationToken);
-      }
-    }
-  }
-
-  private static async Task ProcessRelatedAsync(Record record, InternalLinkData internalLink,
-                                                IDbConnection connection, IDbTransaction transaction, CancellationToken cancellationToken)
-  {
-    var tag = internalLink.RelatedTermLinkIdTag;
-    if (tag != null)
-    {
-      int maxOcc = record.RepCount(tag);
-      for (int occ = 1; occ <= maxOcc; occ++)
-      {
-        var relationId = await record.GetLinkIdAsync(tag, occ, connection, transaction, cancellationToken);
-      }
-    }
-  }
-
-  private async Task CheckLinkAsync(Record record, string? tag, string? relatedTag,
-                                    IDbConnection connection, IDbTransaction transaction,
-                                    CancellationToken cancellationToken)
-  {
-    if (record.Database != null && tag != null && relatedTag != null)
-    {
-      int maxOcc = record.RepCount(tag);
-      for (int occ = 1; occ <= maxOcc; occ++)
-      {
-        var relationId = await record.GetLinkIdAsync(tag, occ, connection, transaction, cancellationToken);
-        {
-          if (relationId.HasValue)
-          {
-            var relatedRecord = await ReadRecordAsync(record.Database, relationId.Value,
-                                                      connection, transaction, cancellationToken);
-            if (relatedRecord != null && !await relatedRecord.LinkIdPresent(relatedTag, record.Id,
-                                                        connection, transaction, cancellationToken))
-            {
-              relatedRecord.Append(relatedTag, record.Id);
-              await relatedRecord.WriteAsync(connection, transaction, cancellationToken);
-            }
-          }
-        }
-      }
-    }
-  }
-
-  private static void RunScript(Record record, ScriptTriggerCodeEnum triggerCode)
-  {
-    var script = record.Database?.BeforeStoragePythonScript;
-    if (!string.IsNullOrWhiteSpace(script))
-    {
-      ScriptHelper.RunPython(script, record, triggerCode, Console.WriteLine);
-      return;
-    }
-
-    script = record.Database?.BeforeStoragePowerShellScript;
-    if (!string.IsNullOrWhiteSpace(script))
-    {
-      // TODO: Add trigger code and console output
-      ScriptHelper.RunPowerShell(script, record);
-    }
-  }
-
-  private static string GetExtensionPath(DatabaseData database, string adaplPath, string extension)
-    => Path.GetFullPath(Path.Combine(Path.GetDirectoryName(database.PhysicalPath)!, adaplPath + extension));
-
-
-  private async Task<int> WriteIndexDataAsyncParallel(IDbConnection connection, IDbTransaction transaction,
-                                         string? fullTextTable, Record record, CancellationToken cancellationToken)
-  {
-    var tasks = new List<Task<int>>();
-    var indexChanges = await record.CreateIndexKeysAsync(connection, transaction, cancellationToken);
-    foreach (var index in indexChanges)
-    {
-      foreach (var change in index.Where(change => change.Count != 0))
-      {
-        tasks.Add(
-           WriteChangesAsync(connection, transaction, fullTextTable, change, cancellationToken)
-          );
-      }
-    }
-    var numbers = await Task.WhenAll(tasks);
-    return numbers.Sum();
-  }
-  private async Task<int> WriteIndexDataAsync(IDbConnection connection, IDbTransaction transaction,
-                                         string? fullTextTable, Record record, CancellationToken cancellationToken)
-  {
-    int result = 0;
-    var indexChanges = await record.CreateIndexKeysAsync(connection, transaction, cancellationToken);
-    foreach (var index in indexChanges)
-    {
-      foreach (var change in index.Where(change => change.Count != 0))
-      {
-        result += await WriteChangesAsync(connection, transaction, fullTextTable, change, cancellationToken);
-      }
-    }
-    return result;
-  }
-
-  private async Task<int> WriteChangesAsync(IDbConnection connection, IDbTransaction transaction, string? fullTextTable,
-                                       IndexRow index, CancellationToken cancellationToken)
-  {
-    if (index is IntegerIndexRow integerRow)
-    {
-      if (index.Count > 0)
-      {
-        return await Repository.AddIndexKeyAsync(connection, transaction, integerRow, cancellationToken);
-      }
-      else if (index.Count < 0)
-      {
-        return await Repository.DeleteIndexKeyAsync(connection, transaction, integerRow, cancellationToken);
-      }
-    }
-
-    if (index is TermIndexRow termRow)
-    {
-      if (index.Count > 0)
-      {
-        return await Repository.AddIndexKeyAsync(connection, transaction, fullTextTable, termRow, cancellationToken);
-      }
-      else if (index.Count < 0)
-      {
-        return await Repository.DeleteIndexKeyAsync(connection, transaction, fullTextTable, termRow, cancellationToken);
-      }
-    }
-
-    if (index is DateIndexRow dateRow)
-    {
-      if (index.Count > 0)
-      {
-        return await Repository.AddIndexKeyAsync(connection, transaction, dateRow, cancellationToken);
-      }
-      else if (index.Count < 0)
-      {
-        return await Repository.DeleteIndexKeyAsync(connection, transaction, dateRow, cancellationToken);
-      }
-    }
-
-    if (index is IsoDateIndexRow isoDateRow)
-    {
-      if (index.Count > 0)
-      {
-        return await Repository.AddIndexKeyAsync(connection, transaction, isoDateRow, cancellationToken);
-      }
-      else if (index.Count < 0)
-      {
-        return await Repository.DeleteIndexKeyAsync(connection, transaction, isoDateRow, cancellationToken);
-      }
-    }
-
-    if (index is BooleanIndexRow booleanRow)
-    {
-      if (index.Count > 0)
-      {
-        return await Repository.AddIndexKeyAsync(connection, transaction, booleanRow, cancellationToken);
-      }
-      else if (index.Count < 0)
-      {
-        return await Repository.DeleteIndexKeyAsync(connection, transaction, booleanRow, cancellationToken);
-      }
-    }
-
-    if (index is AlphaNumericIndexRow alphaNumericRow)
-    {
-      if (index.Count > 0)
-      {
-        return await Repository.AddIndexKey(connection, transaction, fullTextTable, alphaNumericRow, cancellationToken);
-      }
-      else if (index.Count < 0)
-      {
-        return await Repository.DeleteIndexKey(connection, transaction, fullTextTable, alphaNumericRow, cancellationToken);
-      }
-    }
-
-    throw new NotImplementedException($"Unknown type {index.GetType()} for data row");
   }
 }
 

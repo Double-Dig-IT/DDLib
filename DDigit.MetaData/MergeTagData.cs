@@ -1,15 +1,30 @@
 ﻿namespace DDigit.MetaData;
 
-public class MergeTagData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace) :
-  BaseData(objectType, stream, encoding, fileName, Properties, trace)
+public class MergeTagData : BaseData
 {
+  internal MergeTagData(ObjectTypeEnum objectType, FileStream stream, Encoding encoding, bool trace) :
+    base(objectType, stream, encoding, Properties, trace)
+  {
+
+  }
+
+  /// <summary>
+  /// General constructor
+  /// </summary>
+  /// <remarks>
+  /// Made public for creation of FieldData using scripts
+  /// </remarks>
+  public MergeTagData(ObjectTypeEnum objectType) : base(objectType)
+  {
+    ElementCount = 2;
+  }
 
   /// <summary>
   /// The source tag to get the data from.
   /// </summary>
   public string? Source
   {
-    get; private set;
+    get; set;
   }
 
   /// <summary>
@@ -17,7 +32,7 @@ public class MergeTagData(ObjectTypeEnum objectType, Stream stream, Encoding enc
   /// </summary>
   public string? Destination
   {
-    get; private set;
+    get; set;
   }
 
   public override string ToString() => $"{Source} => {Destination}";

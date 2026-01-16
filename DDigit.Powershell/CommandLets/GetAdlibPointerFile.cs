@@ -34,12 +34,24 @@ public class GetAdlibPointerFile : DDCmdlet
     get; set;
   }
 
+  [Parameter()]
+  public RecordSetSortEnum? Sort
+  {
+    get; set;
+  }
+
+  [Parameter()]
+  public SearchSortOrderEnum? SortOrder
+  {
+    get; set;
+  }
+
   /// <summary>
   /// Do the work
   /// </summary>
   protected override async void ProcessRecord()
   {
-    var sets = await provider.GetRecordSetMetaDataAsync(WorkingDirectory, Database, null, SearchTerm, StartFrom, Limit, default);
+    var sets = await provider.GetRecordSetMetaDataAsync(WorkingDirectory, Database, null, SearchTerm, StartFrom, Limit, Sort, SortOrder, default);
     if (SessionState != null)
     {
       foreach (var set in sets)

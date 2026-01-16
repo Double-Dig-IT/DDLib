@@ -11,10 +11,10 @@ public class Record : IRecord
   {
     this.provider = provider;
     Id = id;
-    if (Database == null)
+    if (Database is null)
     {
       Database = MetaDataCache.ReadDatabase(path, database, false);
-      if (Database == null)
+      if (Database is null)
       {
         throw new DatabaseNotFoundException(path, database);
       }
@@ -26,7 +26,42 @@ public class Record : IRecord
         ?? throw new DatasetNotFoundException(dataset, database);
     }
     Creation = Modification = DateTime.Now;
+    FillDefaults();
   }
+
+  private void FillDefaults()
+  {
+    if (Database is not null)
+    {
+      var defaultFields = Database.DefaultValueFields;
+      if (defaultFields is not null)
+      {
+        foreach (var field in defaultFields)
+        {
+          FillDefault(field);
+        }
+      }
+    }
+  }
+
+  private void FillDefault(FieldData field)
+  {
+    Set(field, field.DefaultType switch
+    {
+      DefaultTypeEnum.Value => field.Defaults[0].Text,
+      DefaultTypeEnum.UserName => Environment.UserName,
+      DefaultTypeEnum.CurrentDate => GetCurrentDate(field),
+      _ => throw new DDException($"Unsupported default value type {field.DefaultType} for field {field.Name} in database {field.Database.Name}")
+    });
+  }
+
+  private static string GetCurrentDate(FieldData field)
+    =>
+    field.Type switch
+    {
+      FieldTypeEnum.DateIso => DateTime.Now.ToString("yyyy-MM-dd"),
+      _ => throw new DDException($"Unsupported default date type {field.Type} for field {field.Name} in database {field.Database.Name}")
+    };
 
   public Record(IDataProvider provider, int id, object? data, DatabaseData? database)
   {
@@ -89,91 +124,119 @@ public class Record : IRecord
     get; set;
   }
 
-  public string? this[FieldData field]
+  public string? this[string tagOrFieldName]
   {
-    get => this[field.Tag!];
-    set => this[field.Tag!] = value;
+    get => Get(tagOrFieldName, SqlStateInfo.Default);
+    set => Set(tagOrFieldName, value);
   }
 
-  public string? this[FieldData field, int occ]
+  public string? this[string tagOrFieldName, int occ]
   {
-    get => this[field.Tag!, occ];
-    set => this[field.Tag!, occ] = value;
+    get => Get(tagOrFieldName, occ, SqlStateInfo.Default);
+    set => Set(tagOrFieldName, occ, "", value, false);
   }
 
-
-  public string? this[string field,
-                       IDbConnection? connection = null, IDbTransaction? transaction = null,
-                       CancellationToken cancellationToken = default]
+  public string? this[string tagOrFieldName, string language]
   {
-    get => this[field, 1, "", connection, transaction, cancellationToken]?.ToString();
-    set => this[field, 1, "", connection, transaction, cancellationToken] = value;
+    get => Get(tagOrFieldName, 1, language, SqlStateInfo.Default);
+    set => Set(tagOrFieldName, 1, language, value, false);
   }
 
-  public string? this[string field, int occ,
-                       IDbConnection? connection = null, IDbTransaction? transaction = null,
-                       CancellationToken cancellationToken = default]
+  public string? this[string tagOrFieldName, int occ, string language]
   {
-    get => this[field, occ, "", connection, transaction, cancellationToken];
-    set => this[field, occ, "", connection, transaction, cancellationToken] = value;
+    get => Get(tagOrFieldName, occ, language, SqlStateInfo.Default);
+    set => Set(tagOrFieldName, occ, language, value, false);
   }
 
-  public string? this[string field, string language,
-                       IDbConnection? connection = null, IDbTransaction? transaction = null,
-                       CancellationToken cancellationToken = default]
+  public string? this[FieldData fieldData]
   {
-    get => this[field, 1, language, connection, transaction, cancellationToken];
-    set => this[field, 1, language, connection, transaction, cancellationToken] = value;
+    get => Get(fieldData, SqlStateInfo.Default);
+    set => Set(fieldData, value);
   }
 
-  public string? this[string field, int occ, string language,
-                       IDbConnection? connection = null, IDbTransaction? transaction = null,
-                       CancellationToken cancellationToken = default]
+  public string? this[FieldData fieldData, int occ]
   {
-    get
-    {
-      var task = Task.Run(() => GetAsync(field, occ, language,
-                                         connection, transaction, cancellationToken));
-      task.Wait(cancellationToken);
-      return task.Result;
-    }
-
-    set => Set(field, occ, language, value);
+    get => Get(fieldData, occ, SqlStateInfo.Default);
+    set => Set(fieldData, occ, value);
   }
 
-
-  public async Task<string?> GetAsync(string tagOrFieldName,
-                                      int occ = 1,
-                                      string language = "",
-                                      IDbConnection? connection = null,
-                                      IDbTransaction? transaction = null,
-                                      CancellationToken cancellationToken = default)
-    => (await GetOccurrenceAsync(tagOrFieldName, occ, connection, transaction, cancellationToken))?.GetData(language);
-
-  public async Task<int?> GetLinkIdAsync(string tagOrFieldName,
-                                     int occ = 1,
-                                     IDbConnection? connection = null,
-                                     IDbTransaction? transaction = null,
-                                     CancellationToken cancellationToken = default)
-    => (await GetOccurrenceAsync(tagOrFieldName, occ, connection, transaction, cancellationToken))?.LinkId;
-
-  public string? Get(string tagOrFieldName, int occ,
-                    IDbConnection? connection, IDbTransaction? transaction, CancellationToken cancellationToken)
+  public string? this[FieldData fieldData, int occ, string language]
   {
-    var task = Task.Run(() => GetAsync(tagOrFieldName, occ, "",
-                                       connection, transaction, cancellationToken));
-    task.Wait(cancellationToken);
+    get => Get(fieldData, occ, language, SqlStateInfo.Default);
+    set => Set(fieldData, occ, language, value);
+  }
+
+  internal string? Get(string tagOrFieldName, SqlStateInfo sqlState)
+  {
+    var task = Task.Run(() => GetAsync(tagOrFieldName, sqlState));
+    task.Wait(sqlState.CancellationToken);
     return task.Result;
   }
 
-  internal string? Get(string tagOrFieldName,
-                    IDbConnection? connection, IDbTransaction? transaction, CancellationToken cancellationToken)
+  public string? Get(string tagOrFieldName, int occ, SqlStateInfo sqlState)
   {
-    var task = Task.Run(() => GetAsync(tagOrFieldName, 1, "",
-                                       connection, transaction, cancellationToken));
-    task.Wait(cancellationToken);
+    var task = Task.Run(() => GetAsync(tagOrFieldName, occ, sqlState));
+    task.Wait(sqlState.CancellationToken);
     return task.Result;
   }
+
+  public string? Get(string tagOrFieldName, int occ, string language, SqlStateInfo sqlState)
+  {
+    var task = Task.Run(() => GetAsync(tagOrFieldName, occ, language, sqlState));
+    task.Wait(sqlState.CancellationToken);
+    return task.Result;
+  }
+
+  internal string? Get(FieldData fieldData, SqlStateInfo sqlState)
+  {
+    var task = Task.Run(() => GetAsync(fieldData, sqlState));
+    task.Wait(sqlState.CancellationToken);
+    return task.Result;
+  }
+
+  public string? Get(FieldData fieldData, int occ, SqlStateInfo sqlState)
+  {
+    var task = Task.Run(() => GetAsync(fieldData, occ, sqlState));
+    task.Wait(sqlState.CancellationToken);
+    return task.Result;
+  }
+
+  public string? Get(FieldData fieldData, int occ, string language, SqlStateInfo sqlState)
+  {
+    var task = Task.Run(() => GetAsync(fieldData, occ, language, sqlState));
+    task.Wait(sqlState.CancellationToken);
+    return task.Result;
+  }
+
+  public async Task<string?> GetAsync(string tagOrFieldName, SqlStateInfo sqlState)
+   => (await GetOccurrenceAsync(tagOrFieldName, 1, sqlState))?.GetData("");
+
+  public async Task<string?> GetAsync(string tagOrFieldName, CancellationToken cancellationToken)
+   => (await GetOccurrenceAsync(tagOrFieldName, 1, new SqlStateInfo { CancellationToken = cancellationToken }))?.GetData("");
+
+  public async Task<string?> GetAsync(string tagOrFieldName, int occ, SqlStateInfo sqlState)
+    => (await GetOccurrenceAsync(tagOrFieldName, occ, sqlState))?.GetData("");
+
+  public async Task<string?> GetAsync(string tagOrFieldName, int occ, string language)
+    => (await GetOccurrenceAsync(tagOrFieldName, occ, SqlStateInfo.Default))?.GetData(language);
+
+  public async Task<string?> GetAsync(string tagOrFieldName, int occ, string language, SqlStateInfo sqlState)
+    => (await GetOccurrenceAsync(tagOrFieldName, occ, sqlState))?.GetData(language);
+
+  public async Task<string?> GetAsync(string tagOrFieldName, int occ, string language, CancellationToken cancellationToken)
+    => (await GetOccurrenceAsync(tagOrFieldName, occ, new SqlStateInfo { CancellationToken = cancellationToken }))?.GetData(language);
+
+  public async Task<string?> GetAsync(FieldData fieldData, SqlStateInfo sqlState)
+  => (await GetOccurrenceAsync(fieldData, 1, sqlState))?.GetData("");
+
+  public async Task<string?> GetAsync(FieldData fieldData, int occ, SqlStateInfo sqlState)
+  => (await GetOccurrenceAsync(fieldData, occ, sqlState))?.GetData("");
+
+  public async Task<string?> GetAsync(FieldData fieldData, int occ, string language, SqlStateInfo sqlState)
+  => (await GetOccurrenceAsync(fieldData, occ, sqlState))?.GetData(language);
+
+  public async Task<int?> GetLinkIdAsync(string tagOrFieldName, int occ, SqlStateInfo sqlState)
+    => (await GetOccurrenceAsync(tagOrFieldName, occ, sqlState))?.LinkId;
 
   public void Set(string field, object? value) => Set(field, 1, value);
 
@@ -194,9 +257,9 @@ public class Record : IRecord
     var result = string.Empty;
     if (fieldData.IsMultiLingual)
     {
-      if (language == null || (string.IsNullOrWhiteSpace(language) && !fromDeserialization))
+      if (language is null || (string.IsNullOrWhiteSpace(language) && !fromDeserialization))
       {
-        if (DefaultLanguage == null)
+        if (DefaultLanguage is null)
         {
           throw new LanguageNotSetException(fieldData.ToString());
         }
@@ -227,16 +290,14 @@ public class Record : IRecord
 
   private void Set(FieldData fieldData, FieldData groupFieldData, int occ, string language, object? value, bool invariant = false)
   {
-    if (occ > 1 && !fieldData.IsRepeated)
-    {
-      throw new FieldIsNotRepeatedException(fieldData.Name!, occ);
-    }
+    fieldData.ValidateOccurrence(occ);
+
     var occurrence = Fields.
             FindOrCreateOccurrenceList(groupFieldData.Tag).
               FindOrCreate(fieldData.OccurrenceDataType, occ);
     if (groupFieldData.Tag == fieldData.Tag)
     {
-      if (fieldData.Enumeration)
+      if (fieldData.IsEnumeration)
       {
         occurrence.DataType = OccurrenceDataTypeEnum.Enumeration;
         if (value == null)
@@ -285,33 +346,21 @@ public class Record : IRecord
   {
     foreach (var fieldInGroupData in Database!.FieldGroup(fieldData))
     {
-      // link id fields are created by the linked field, so we do not have to insert them separately.
-      if (!fieldInGroupData.IsLinkIdField)
+      var occurrenceList = Fields.FindOrCreateOccurrenceList(fieldInGroupData.Tag!);
+      var occurrence = occurrenceList.InsertOrCreate(fieldInGroupData.OccurrenceDataType, occ);
+
+      if (fieldData.Tag == fieldInGroupData.Tag)
       {
-        var occurrence = Fields.
-            FindOrCreateOccurrenceList(fieldInGroupData.Tag).
-              InsertOrCreate(fieldInGroupData.OccurrenceDataType, occ);
-        if (fieldData.Tag == fieldInGroupData.Tag)
-        {
-          var dataType = fieldInGroupData.OccurrenceDataType;
-          var lang = dataType == OccurrenceDataTypeEnum.Multilingual || dataType == OccurrenceDataTypeEnum.Enumeration ? DetermineLanguage(fieldInGroupData, language) : "";
-          occurrence.Set(dataType, lang, value, invariant);
-          if (fieldInGroupData.IsLinked && fieldInGroupData.LinkIdTag != null)
-          {
-            // if we just inserted a linked field, then we also need to insert the appropriate link id field and set it to be unresolved (0)
-            var linkRefOccurrence = Fields.
-              FindOrCreateOccurrenceList(fieldInGroupData.LinkIdTag).
-                InsertOrCreate(fieldInGroupData.OccurrenceDataType, occ);
-            linkRefOccurrence.Set(OccurrenceDataTypeEnum.LinkRef, "", 0, false);
-          }
-        }
+        var dataType = fieldInGroupData.OccurrenceDataType;
+        var lang = dataType == OccurrenceDataTypeEnum.Multilingual || dataType == OccurrenceDataTypeEnum.Enumeration ? DetermineLanguage(fieldInGroupData, language) : "";
+        occurrence.Set(dataType, lang, value, invariant);
       }
     }
   }
 
   public void Delete(string tagOrFieldName, int occ) => Delete(GetFieldData(tagOrFieldName), occ);
 
-  public void Delete (FieldData fieldData, int occ)
+  public void Delete(FieldData fieldData, int occ)
   {
     List<string> deletedTags = [];
 
@@ -323,12 +372,12 @@ public class Record : IRecord
         // This can happen if the field is part of a group and is linked or merged.
         continue;
       }
-      var occurrences = Fields.FindOrCreateOccurrenceList(field.Tag);
+      var occurrences = Fields.FindOrCreateOccurrenceList(field.Tag!);
       occurrences.Delete(occ);
       deletedTags.Add(field.Tag!);
 
       // If the field is linked, we also need to remove the link reference.
-      if (fieldData.IsLinked && fieldData.LinkIdTag != null && !deletedTags.Contains(fieldData.LinkIdTag))
+      if (fieldData.IsLinked && fieldData.LinkIdTag is not null && !deletedTags.Contains(fieldData.LinkIdTag))
       {
         var linkRefOccurrences = Fields.
           FindOrCreateOccurrenceList(fieldData.LinkIdTag);
@@ -347,9 +396,21 @@ public class Record : IRecord
   private DatabaseData DatabaseNotNull
     => Database ?? throw new NullReferenceException(nameof(Database));
 
-  private async Task<Occurrence?> GetOccurrenceAsync(string fieldNameOrTag, int occ,
-                                                     IDbConnection? connection, IDbTransaction? transaction,
-                                                     CancellationToken cancellationToken)
+  private async Task<Occurrence?> GetOccurrenceForMergedFieldAsync(FieldData fieldData, int occ, SqlStateInfo sqlState)
+  {
+    var linkFieldData = fieldData.LinkedFieldData ?? throw new DDException(nameof(fieldData.LinkedFieldData));
+    var linkIdTag = linkFieldData.LinkIdTag ?? throw new DDException($"linkId tag for field '{linkFieldData.Name}' in database '{linkFieldData.Database.Name}' is null");
+
+    // force a read and resolve of the merged in group
+    var mainLinkOccurrence = await GetOccurrenceAsync(linkFieldData, occ, sqlState);
+    // Daan: made this a TryGetValue as Fields[linkIdTag] could throw KeyNotFound exception.
+    var linkId = Fields.TryGetValue(linkIdTag, out var occurrences) && occurrences is [var first, ..] ? first.LinkId : 0;
+    // if the link is 0 the record has not been written yet, stop resolving.
+    return mainLinkOccurrence is not null && linkId > 0 ?
+      await GetOccurrenceAsync(fieldData, occ, sqlState) : null;
+  }
+
+  private async Task<Occurrence?> GetOccurrenceAsync(string fieldNameOrTag, int occ, SqlStateInfo sqlState)
   {
     Occurrence? occurrence = null;
 
@@ -365,33 +426,40 @@ public class Record : IRecord
       {
         occurrence = GetOccurrence(fieldData, occ);
       }
-      if (occurrence == null)
+      if (occurrence is null)
       {
-        // occurrence not found, check if we are asking for a linked field or a merged field
-        // if so get the data from the remote record.
-        if (fieldData.IsLinked || fieldData.LinkIdTag == null)
+        occurrence ??= await (fieldData switch
         {
-          occurrence = await GetOccurrenceForLinkedField(fieldData, remainder, occ, connection, transaction, cancellationToken);
-        }
-        else if (fieldData.IsMergedField)
-        {
-          var linkFieldData = fieldData.LinkedFieldData ?? throw new NullReferenceException(nameof(fieldData.LinkedFieldData));
-          // force a read and resolve of the merged in group
-          var mainLinkOccurrence = await GetOccurrenceAsync(linkFieldData.Tag!, occ, connection, transaction, cancellationToken);
-          return mainLinkOccurrence != null ?
-            await GetOccurrenceAsync(fieldData.Tag!, occ, connection, transaction, cancellationToken) : null;
-        }
-        else if (fieldData.IsContextField)
-        {
-          occurrence = await GetOccurrenceForContextFieldAsync(fieldData, occ, connection, transaction, cancellationToken);
-        }
+          { IsLinked: true, LinkIdTag: not null } => GetOccurrenceForLinkedField(fieldData, remainder, occ, sqlState),
+          { IsMergedField: true } => GetOccurrenceForMergedFieldAsync(fieldData, occ, sqlState),
+          { IsContextField: true } => GetOccurrenceForContextFieldAsync(fieldData, occ, sqlState),
+          _ => Task.FromResult<Occurrence?>(null)
+        });
       }
     }
 
     return occurrence;
   }
 
-  private async Task<Occurrence?> GetOccurrenceForContextFieldAsync(FieldData fieldData, int occ, IDbConnection? connection, IDbTransaction? transaction, CancellationToken cancellationToken)
+  private async Task<Occurrence?> GetOccurrenceAsync(FieldData fieldData, int occ, SqlStateInfo sqlState)
+  {
+    var occurrence = GetOccurrence(fieldData, occ);
+
+    if (occurrence is null)
+    {
+      occurrence ??= await (fieldData switch
+      {
+        { IsLinked: true, LinkIdTag: not null } => GetOccurrenceForLinkedField(fieldData, null, occ, sqlState),
+        { IsMergedField: true } => GetOccurrenceForMergedFieldAsync(fieldData, occ, sqlState),
+        { IsContextField: true } => GetOccurrenceForContextFieldAsync(fieldData, occ, sqlState),
+        _ => Task.FromResult<Occurrence?>(null)
+      });
+    }
+
+    return occurrence;
+  }
+
+  private async Task<Occurrence?> GetOccurrenceForContextFieldAsync(FieldData fieldData, int occ, SqlStateInfo sqlState)
   {
     Occurrence? result = null;
     var parentField = fieldData.ParentField!;
@@ -399,7 +467,7 @@ public class Record : IRecord
     var linkId = GetData(linkRefField, occ)?.LinkId;
     if (linkId.HasValue)
     {
-      var term = await GetTermAsync(parentField.LinkedDatabase!, linkId.Value, parentField.LinkIndexTag!, connection, transaction, cancellationToken);
+      var term = await GetTermAsync(parentField.LinkedDatabase!, linkId.Value, parentField.LinkIndexTag!, sqlState);
       if (term != null)
       {
         result = new Occurrence(OccurrenceDataTypeEnum.Standard, new Element(term));
@@ -408,18 +476,18 @@ public class Record : IRecord
     return result;
   }
 
-  private async Task<string?> GetTermAsync(DatabaseData databaseData, int id, string termTag, IDbConnection? connection, IDbTransaction? transaction, CancellationToken cancellationToken)
+  private async Task<string?> GetTermAsync(DatabaseData databaseData, int id, string termTag, SqlStateInfo sqlState)
   {
     string? result = string.Empty;
-    var linkedRecord = await ReadLinkedRecordAsync(databaseData, id, connection, transaction, cancellationToken);
+    var linkedRecord = await ReadLinkedRecordAsync(databaseData, id, sqlState);
     if (linkedRecord != null)
     {
-      var parentId = await linkedRecord.ParentId(termTag);
+      var parentId = await linkedRecord.ParentId(termTag, sqlState);
       if (parentId != 0)
       {
-        result = await GetTermAsync(databaseData, parentId, termTag, connection, transaction, cancellationToken);
+        result = await GetTermAsync(databaseData, parentId, termTag, sqlState);
       }
-      var term = await linkedRecord.GetAsync(termTag, 1, cancellationToken: cancellationToken);
+      var term = await linkedRecord.GetAsync(termTag, 1, sqlState);
       if (term != null)
       {
         if (result != string.Empty)
@@ -432,13 +500,13 @@ public class Record : IRecord
     return result;
   }
 
-  private async Task<int> ParentId(string linkIndexTag)
+  private async Task<int> ParentId(string linkIndexTag, SqlStateInfo sqlState)
   {
     int parentId = 0;
     var hierarchy = Database!.InternalLinks.FirstOrDefault(il => il.TermTag == linkIndexTag);
     if (hierarchy != null && hierarchy.BroaderTermLinkIdTag != null)
     {
-      var broaderId = await GetAsync(hierarchy.BroaderTermLinkIdTag);
+      var broaderId = await GetAsync(hierarchy.BroaderTermLinkIdTag, sqlState);
       if (!string.IsNullOrEmpty(broaderId))
       {
         parentId = int.Parse(broaderId);
@@ -447,37 +515,33 @@ public class Record : IRecord
     return parentId;
   }
 
-  private async Task<Occurrence?> GetOccurrenceForLinkedField(FieldData fieldData, string? path, int occ,
-                                      IDbConnection? connection, IDbTransaction? transaction,
-                                      CancellationToken cancellationToken)
+  private async Task<Occurrence?> GetOccurrenceForLinkedField(FieldData fieldData, string? path, int occ, SqlStateInfo sqlState)
   {
-    var linkFieldData = fieldData.IsLinked ? fieldData : fieldData.LinkedFieldData;
-    if (linkFieldData == null)
+    var linkFieldData = fieldData.IsLinked ? fieldData : fieldData.LinkedField;
+    if (linkFieldData is null)
     {
       throw new NullReferenceException(nameof(linkFieldData));
     }
 
-    var linkOccurrence = await GetOccurrenceAsync(fieldData.LinkIdTag, occ, connection, transaction, cancellationToken);
-    if (linkOccurrence != null)
+    var linkOccurrence = await GetOccurrenceAsync(fieldData.LinkIdTag, occ, sqlState);
+    if (linkOccurrence is not null)
     {
-      var linkedRecord = await GetLinkedRecordAsync(linkFieldData, linkOccurrence,
-                                                    connection, transaction, cancellationToken);
-      if (path != null && linkedRecord != null)
+      var linkedRecord = await GetLinkedRecordAsync(linkFieldData, linkOccurrence, sqlState);
+      if (path is not null && linkedRecord is not null)
       {
         // If we have a path, we need to go deeper into the linked record.
-        return await linkedRecord.GetOccurrenceAsync(path, 1, connection, transaction, cancellationToken);
+        return await linkedRecord.GetOccurrenceAsync(path, 1, sqlState);
       }
       else
       {
-        if (linkedRecord == null)
+        if (linkedRecord is null)
         {
           ClearMergedData(linkFieldData, occ);
         }
         else
         {
           linkedRecord.Database ??= linkFieldData.LinkedDatabase;
-          await GetMergedDataAsync(linkFieldData, linkedRecord, occ,
-                                   connection, transaction, cancellationToken);
+          await GetMergedDataAsync(linkFieldData, linkedRecord, occ, sqlState);
         }
       }
     }
@@ -514,11 +578,11 @@ public class Record : IRecord
     occurrences[occ - 1] = new Occurrence(fieldData.OccurrenceDataType);
   }
 
-  private async Task GetMergedDataAsync(FieldData fieldData, Record linkedRecord, int occ, IDbConnection? connection, IDbTransaction? transaction, CancellationToken cancellationToken)
+  private async Task GetMergedDataAsync(FieldData fieldData, Record linkedRecord, int occ, SqlStateInfo sqlState)
   {
     foreach (var mergePair in fieldData.MergeTags)
     {
-      var occurrence = await linkedRecord.GetOccurrenceAsync(mergePair.Source!, 1, connection, transaction, cancellationToken);
+      var occurrence = await linkedRecord.GetOccurrenceAsync(mergePair.Source!, 1, sqlState);
       var destinationFieldData = Database?.GetFieldByTagOrName(mergePair.Destination ??
         throw new NullReferenceException(nameof(mergePair.Destination))) ??
           throw new NullReferenceException(nameof(Database));
@@ -559,7 +623,7 @@ public class Record : IRecord
           {
             value = occurrences[occ - 1].Invariant;
           }
-          else if (fieldData.Enumeration)
+          else if (fieldData.IsEnumeration)
           {
             value = new Element(occurrences[occ - 1].NeutralValue);
           }
@@ -585,10 +649,7 @@ public class Record : IRecord
     return result;
   }
 
-  private async Task<Record?> GetLinkedRecordAsync(FieldData fieldData, Occurrence linkOccurrence,
-                                                   IDbConnection? connection,
-                                                   IDbTransaction? transaction,
-                                                   CancellationToken cancellationToken)
+  private async Task<Record?> GetLinkedRecordAsync(FieldData fieldData, Occurrence linkOccurrence, SqlStateInfo sqlState)
   {
     if (string.IsNullOrWhiteSpace(fieldData.LinkIdTag))
     {
@@ -613,38 +674,27 @@ public class Record : IRecord
 
     if (linkId.HasValue && linkId.Value > 0)
     {
-      record = await ReadLinkedRecordAsync(fieldData.LinkedDatabase, linkId.Value, connection, transaction, cancellationToken);
+      record = await ReadLinkedRecordAsync(fieldData.LinkedDatabase, linkId.Value, sqlState);
     }
 
     return record;
   }
 
-  private async Task<Record?> ReadLinkedRecordAsync(DatabaseData linkedDatabaseData, int id,
-                                                   IDbConnection? connection,
-                                                   IDbTransaction? transaction,
-                                                   CancellationToken cancellationToken)
+  private async Task<Record?> ReadLinkedRecordAsync(DatabaseData linkedDatabaseData, int id, SqlStateInfo sqlState)
   => linkedDatabaseData != null && linkedDatabaseData.Name != null ?
-        await provider!.ReadRecordAsync(linkedDatabaseData, id, connection, transaction, cancellationToken) : null;
+        await provider!.ReadRecordAsync(linkedDatabaseData, id, sqlState) : null;
 
-  private static FieldData? ValidateGetData(DatabaseData database, string field, string? remainder, int occ)
+  private FieldData? ValidateGetData(DatabaseData database, string field, string? remainder, int occ)
   {
-    FieldData? result = null;
+    FieldData? fieldData = null;
     if (database != null)
     {
-      result = database.FindFieldByTagOrName(field, remainder) ??
-        throw new FieldNotFoundException(field, occ, database.Name);
+      fieldData = database.FindFieldByTagOrName(field, remainder) ??
+        throw new FieldNotFoundException(field, occ, database.Name, Id);
 
-      if (occ < 1)
-      {
-        throw new InvalidOccurrenceException(occ);
-      }
-
-      if (occ > 1 && !result.IsRepeated)
-      {
-        throw new FieldIsNotRepeatedException(field, occ);
-      }
+      fieldData.ValidateOccurrence(occ);
     }
-    return result;
+    return fieldData;
   }
 
   private static XElement ParseRecord(object data)
@@ -696,80 +746,116 @@ public class Record : IRecord
     return (tag, occ, new Element(ParseValue(fieldData, field.Value), language, invariant, isLocal));
   }
 
-  private static object? ParseValue(FieldData? fieldData, string value)
-    => fieldData != null ?
-     // TODO: Add other types
-     fieldData.Type switch
-     {
-       FieldTypeEnum.Integer => !string.IsNullOrEmpty(value) ? int.Parse(value) : 0,
-       _ => value,
-     } : value;
-
-  private void SetField(FieldDictionary fields, string field, int occ, Element element, bool fromDeserialization = false)
+  private object? ParseValue(FieldData? fieldData, string value)
   {
-    var fieldData = Database?.GetFieldByTagOrName(field) ??
-      throw new FieldNotFoundException(field, Database?.Name);
-
-    var tag = fieldData.Tag ?? throw new NullReferenceException(fieldData.Tag);
-
-    if (!fields.TryGetValue(tag, out var occurrences))
+    if (fieldData is not null && !string.IsNullOrWhiteSpace(value))
     {
-      occurrences = fields[tag] = [];
-    }
-
-    while (occurrences.Count < occ)
-    {
-      occurrences.Add(new Occurrence(fieldData.OccurrenceDataType));
-    }
-
-    if (fieldData.Enumeration)
-    {
-      var occurrence = occurrences[occ - 1] = new Occurrence(OccurrenceDataTypeEnum.Enumeration);
-      if (fromDeserialization && string.IsNullOrWhiteSpace((string?)element.Value))
+      switch (fieldData.Type)
       {
-        occurrences[occ - 1] = new Occurrence(fieldData.OccurrenceDataType, element);
-      }
-      else
-      {
-        SetEnumField(occurrence,
-          fieldData.GetEnumerationValues(element.Value!.ToString()!));
+        case FieldTypeEnum.Integer:
+          if (int.TryParse(value, out var intValue))
+          {
+            return intValue;
+          }
+          throw new InvalidIntegerException(fieldData.Database?.Name, fieldData.Name, value, Id);
+        default:
+          return value;
       }
     }
-    else if (fieldData.IsMultiLingual)
-    {
-      if (element.Value is string && !string.IsNullOrWhiteSpace((string?)element.Value))
-      {
-        element.Language = DetermineLanguage(fieldData, element.Language, fromDeserialization);
-      }
-
-      var occurrence = occurrences[occ - 1];
-      occurrence.Elements[element.Language] = new(element.Value, element.Language, element.Invariant, element.IsLocal);
-
-      if (element.Invariant)
-      {
-        occurrence.Elements[""] = new Element(element.Value, "");
-      }
-    }
-    else
-    {
-      var occurrence = occurrences[occ - 1];
-      occurrence.Elements[""] = new(element.Value);
-    }
+    return value;
   }
+
 
   private void DeSerialize(object? data)
   {
-    if (data != null)
+    void SetField(FieldDictionary fields, string field, int occ, Element element)
+    {
+      var fieldData = Database?.FindFieldByTagOrName(field) ??
+        throw new FieldNotFoundException(field, occ, Database?.Name, Id);
+
+      var tag = fieldData.Tag ?? throw new NullReferenceException(fieldData.Tag);
+
+      OccurrenceList GetOccurrenceList()
+      {
+        if (!fields.TryGetValue(tag, out var occurrences))
+        {
+          occurrences = fields[tag] = [];
+        }
+
+        while (occurrences.Count < occ)
+        {
+          occurrences.Add(new Occurrence(fieldData.OccurrenceDataType));
+        }
+        return occurrences;
+      }
+
+      switch (fieldData)
+      {
+        case { IsLinked: true }:
+          break; // Linked field is dynamically rendered on GetOccurrenceAsync, ignore this value
+
+        case { IsMergedField: true }:
+          break; // Merged field is dynamically rendered on GetOccurrenceAsync, ignore this value
+
+        case { IsContextField: true }:
+          break; // Context field is dynamically rendered on GetOccurrenceAsync, ignore this value
+
+        case { IsEnumeration: true }:
+          {
+            var occurrences = GetOccurrenceList();
+            var occurrence = occurrences[occ - 1] = new Occurrence(OccurrenceDataTypeEnum.Enumeration);
+            if (string.IsNullOrWhiteSpace((string?)element.Value))
+            {
+              occurrences[occ - 1] = new Occurrence(fieldData.OccurrenceDataType, element);
+            }
+            else
+            {
+              SetEnumField(occurrence,
+                fieldData.GetEnumerationValues(element.Value!.ToString()!));
+            }
+          }
+          break;
+
+        case { IsMultiLingual: true }:
+          {
+            if (element.Value is string && !string.IsNullOrWhiteSpace((string?)element.Value))
+            {
+              element.Language = DetermineLanguage(fieldData, element.Language, fromDeserialization: true);
+            }
+
+            var occurrences = GetOccurrenceList();
+            var occurrence = occurrences[occ - 1];
+            occurrence.Elements[element.Language] = new(element.Value, element.Language, element.Invariant, element.IsLocal);
+
+            if (element.Invariant)
+            {
+              occurrence.Elements[""] = new Element(element.Value, "");
+            }
+          }
+          break;
+
+        default:
+          {
+            var occurrences = GetOccurrenceList();
+            var occurrence = occurrences[occ - 1];
+            occurrence.Elements[""] = new(element.Value);
+          }
+          break;
+      }
+    }
+
+    if (data is not null)
     {
       var recordElement = ParseRecord(data);
       Creation = ParseCreationDateTime(recordElement);
       Modification = ParseModificationDateTime(recordElement);
+
       try
       {
         foreach (var fieldElement in recordElement.Elements("field"))
         {
           var (tag, occ, element) = ParseField(fieldElement);
-          SetField(Fields, tag, occ, element, true);  // Allow empty language fields here to be able to read "malformed" records
+          SetField(Fields, tag, occ, element);  // Allow empty language fields here to be able to read "malformed" records
         }
       }
       catch (Exception ex)
@@ -791,7 +877,8 @@ public class Record : IRecord
       var fieldData = DatabaseNotNull.FindFieldByTagOrName(tag) ??
         throw new NullReferenceException(nameof(FieldData));
       if (!fieldData.IsLinked &&
-          !fieldData.IsMergedField)
+          !fieldData.IsMergedField &&
+          !fieldData.IsContextField)
       {
         Serialize(fieldData, recordElement, tag, occurrences);
       }
@@ -800,255 +887,207 @@ public class Record : IRecord
     return xml;
   }
 
-  public async Task<JsonObject> ToJsonAsync(SerializeOptions? options,
-                                            IDbConnection? connection,
-                                            IDbTransaction? transaction,
-                                            CancellationToken cancellationToken)
+  public Task<JsonObject> ToJsonAsync()
+    => ToJsonAsync(null, SqlStateInfo.Default);
+
+  public Task<JsonObject> ToJsonAsync(CancellationToken cancellationToken)
+    => ToJsonAsync(null, new SqlStateInfo { CancellationToken = cancellationToken });
+
+  public Task<JsonObject> ToJsonAsync(SerializeOptions? options)
+    => ToJsonAsync(options, SqlStateInfo.Default);
+
+  public Task<JsonObject> ToJsonAsync(SerializeOptions? options, CancellationToken cancellationToken)
+    => ToJsonAsync(options, new SqlStateInfo { CancellationToken = cancellationToken });
+
+  public async Task<JsonObject> ToJsonAsync(SerializeOptions? options, SqlStateInfo sqlState)
   {
     var result = new JsonObject();
     var recordObject = new JsonObject();
     result["record"] = recordObject;
 
-    if (options?.LDContext != null && options.JsonLD && Database?.Name != null)
+    async Task AddFieldAsync(JsonObject parent, FieldData fieldData, string fieldName)
     {
-      recordObject["@context"] = options.LDContext;
-      recordObject["@id"] = GetLinkedDataId(Database.Name, Id, options);
-    }
-
-    recordObject.AddField("identifier", Id, options);
-    recordObject.AddField("creation", Creation, options);
-    recordObject.AddField("modification", Modification, options);
-
-    foreach (var field in Fields)
-    {
-      await AddFieldAsync(recordObject, DatabaseNotNull, field, options,
-                          connection, transaction, cancellationToken);
-    }
-    return result;
-  }
-
-  private async Task AddFieldAsync(JsonObject parent, DatabaseData database,
-    KeyValuePair<string, OccurrenceList> field, SerializeOptions? options,
-    IDbConnection? connection, IDbTransaction? transaction, CancellationToken cancellationToken)
-  {
-    var fieldData = database.FindFieldByTagOrName(field.Key);
-    if (fieldData != null)
-    {
-      var fieldName = fieldData.IsLinkIdField ?
-                      fieldData.LinkedField!.Name : fieldData.Name;
-      if (!string.IsNullOrEmpty(fieldName))
+      var nodeName = fieldData.Name!;
+      var groupName = fieldData.Group;
+      if (!string.IsNullOrEmpty(groupName))
       {
-        var fields = options?.Fields;
-        if (fields == null || fields.Contains(fieldName) || fields.Contains("*"))
-        {
-          var nodeName = EncodeFieldName(fieldName);
-          var groupName = fieldData.Group;
-          if (string.IsNullOrEmpty(groupName))
-          {
-            await AddNonGroupedFieldAsync(parent, nodeName, fieldData, field, options,
-                                          connection, transaction, cancellationToken);
-          }
-          else
-          {
-            await AddGroupedFieldAsync(parent, EncodeFieldName(groupName), nodeName,
-                                       fieldData, field, options,
-                                       connection, transaction, cancellationToken);
-          }
-        }
-      }
-    }
-  }
-
-  private async Task AddGroupedFieldAsync(JsonObject parent, string groupNodeName, string nodeName,
-    FieldData fieldData, KeyValuePair<string, OccurrenceList> field, SerializeOptions? options,
-    IDbConnection? connection, IDbTransaction? transaction, CancellationToken cancellationToken)
-  {
-    if (parent[groupNodeName] is not JsonArray array)
-    {
-      array = [];
-      parent.Add(groupNodeName, array);
-    }
-
-    while (array.Count < field.Value.Count)
-    {
-      array.Add(new JsonObject());
-    }
-
-    int occ = 0;
-    foreach (var occurrence in field.Value)
-    {
-      var occurrenceObject = array[occ];
-      if (occurrenceObject != null)
-      {
-        await AddSingleFieldAsync(occurrenceObject, nodeName, fieldData, field.Value[occ], options,
-                                  connection, transaction, cancellationToken);
-      }
-      occ++;
-    }
-  }
-
-  private async Task AddNonGroupedFieldAsync(JsonNode parent, string nodeName, FieldData fieldData,
-    KeyValuePair<string, OccurrenceList> field, SerializeOptions? options,
-    IDbConnection? connection, IDbTransaction? transaction, CancellationToken cancellationToken)
-  {
-    if (fieldData.IsRepeated)
-    {
-      await AddRepeatedFieldAsync(parent, nodeName, fieldData, field, options,
-                                  connection, transaction, cancellationToken);
-    }
-    else
-    {
-      await AddSingleFieldAsync(parent, nodeName, fieldData, field.Value[0], options,
-                                connection, transaction, cancellationToken);
-    }
-  }
-
-  private async Task AddRepeatedFieldAsync(JsonNode node, string nodeName, FieldData fieldData,
-    KeyValuePair<string, OccurrenceList> field, SerializeOptions? options,
-    IDbConnection? connection, IDbTransaction? transaction, CancellationToken cancellationToken)
-  {
-    var array = new JsonArray();
-    var arrayNodeName = nodeName;
-    foreach (var occurrence in field.Value)
-    {
-      arrayNodeName = await AddSingleFieldAsync(array, nodeName, fieldData, occurrence, options,
-                                                connection, transaction, cancellationToken);
-    }
-    node[arrayNodeName] = array;
-  }
-
-  private async Task<string> AddSingleFieldAsync(JsonNode node, string nodeName, FieldData fieldData,
-    Occurrence occurrence, SerializeOptions? options,
-    IDbConnection? connection, IDbTransaction? transaction, CancellationToken cancellationToken)
-  {
-    if (!fieldData.IsMultiLingual)
-    {
-      if (fieldData.IsLinkIdField && fieldData.LinkedField != null)
-      {
-        var linkId = occurrence[""];
-        if (linkId != null)
-        {
-          if (options != null && options.JsonLD &&
-              fieldData.Name != null && fieldData.LinkedField != null && fieldData.LinkedField.LinkedDatabase != null &&
-              GetLinkedDataId(fieldData.LinkedField, linkId, options) is string id)
-          {
-            var jsonLd = new JsonObject { ["@id"] = id };
-            var linkedRecord =
-              await ReadLinkedRecordAsync(fieldData.LinkedField.LinkedDatabase, int.Parse(linkId.ToString()!),
-                                         connection, transaction, cancellationToken);
-            if (linkedRecord != null
-              && linkedRecord.Fields.TryGetValue(fieldData.LinkedField!.LinkIndexTag!, out var linkedOccurrences))
-            {
-              await AddSingleFieldAsync(jsonLd, "term", fieldData.LinkedField, linkedOccurrences[0], options,
-                                        connection, transaction, cancellationToken);
-            }
-            AddNodeToNode(node, nodeName, jsonLd);
-            return nodeName;
-          }
-          else
-          {
-            var fields = options?.Fields;
-            if (fields != null && fieldData.Name != null && fields.Contains(fieldData.Name) && fieldData.LinkedField.LinkedDatabase != null)
-            {
-              AddElementToNode(node, EncodeFieldName(fieldData.Name), linkId);
-            }
-            var linkedDatabase = fieldData.LinkedField.LinkedDatabase ??
-              throw new NullReferenceException(nameof(fieldData.LinkedField.LinkedDatabase));
-            var linkedRecord =
-              await ReadLinkedRecordAsync(linkedDatabase, (int)linkId.Value!, connection, transaction, cancellationToken);
-            if (linkedRecord != null
-              && linkedRecord.Fields.TryGetValue(fieldData.LinkedField.LinkIndexTag!, out var linkedOccurrences))
-            {
-              return await AddSingleFieldAsync(node, EncodeFieldName(fieldData.LinkedField.Name!), fieldData.LinkedField,
-                     linkedOccurrences[0], options, connection, transaction, cancellationToken);
-            }
-          }
-        }
-      }
-      var element = occurrence[""];
-      if (element != null && element.Values != null && !element.Values.IsEmpty)
-      {
-        AddElementToNode(node, nodeName, element);
-      }
-    }
-    else
-    {
-      var languages = new JsonObject();
-      foreach (var (language, element) in occurrence.Elements)
-      {
-        languages[!string.IsNullOrEmpty(language) ? language : "@none"] = element.ToString();
-      }
-      if (languages.Count > 1)
-      {
-        AddNodeToNode(node, nodeName, languages);
+        await AddGroupedFieldAsync();
       }
       else
       {
-        var element = occurrence[""];
-        if (element != null && element.Values != null && !element.Values.IsEmpty)
+        await AddNonGroupedFieldAsync();
+      }
+
+      async Task AddGroupedFieldAsync()
+      {
+        var repCount = RepCount(fieldData);
+        if (repCount > 0)
         {
-          AddElementToNode(node, nodeName, element);
+          if (parent[groupName] is not JsonArray array)
+          {
+            array = [];
+            parent.Add(groupName, array);
+          }
+
+          while (array.Count < repCount)
+          {
+            array.Add(new JsonObject());
+          }
+
+          for (var occ = 1; occ <= repCount; occ++)
+          {
+            if (array[occ - 1] is { } occurrenceObject)
+            {
+              await AddOccurrence(occurrenceObject, fieldData, fieldName, occ);
+            }
+          }
+        }
+      }
+
+      async Task AddNonGroupedFieldAsync()
+      {
+        if (fieldData.IsRepeated)
+        {
+          var repCount = RepCount(fieldData);
+          if (repCount > 0)
+          {
+            if (parent[nodeName] is not JsonArray array)
+            {
+              array = [];
+              parent.Add(nodeName, array);
+            }
+
+            for (var occ = 1; occ <= repCount; occ++)
+            {
+              await AddOccurrence(array, fieldData, fieldName, occ);
+            }
+          }
+        }
+        else
+        {
+          await AddOccurrence(parent, fieldData, fieldName, 1);
+        }
+      }
+
+      async Task AddOccurrence(JsonNode node, FieldData occurrenceFieldData, string occurrenceFieldName, int occ)
+      {
+        var occurrence = await GetOccurrenceAsync(occurrenceFieldName, occ, sqlState);
+        if (occurrence != null)
+        {
+          var occurrenceNodeName = occurrenceFieldData.Name!;
+          switch (occurrenceFieldData)
+          {
+            case { IsLinked: true }:
+
+              // TODO: Deal with possible indirection
+              if (FieldData.GetRoot(occurrenceFieldName).remainder is { } linkField)
+              {
+                // Excessive and dirty fix to get the IndexField for indirection...
+                //static string DetermineIndexField(string source, string old, string _new)
+                //  => source.Length > old.Length ? string.Concat(source.AsSpan(0, source.Length - old.Length), _new) : _new;
+              }
+              else
+              {
+                var linkedId = (await GetOccurrenceAsync(occurrenceFieldData.LinkIdTag, occ, sqlState))?.LinkId;
+                if (linkedId == null)
+                {
+                  // This is a case of data corruption, but we do not want the API to crash on it, so just ignore the situation.
+                  return;
+                }
+                var linkedDatase = occurrenceFieldData.LinkedDatabase!;
+                var linkedData = GetLinkedDataFromNode(linkedDatase.Name!, linkedId.Value);
+                // TODO: IIIF currently only gets added on linked fields...
+                if (occurrenceFieldData.Type == FieldTypeEnum.Image)
+                {
+                  linkedData.AddIIIF(linkedId.ToString(), options);
+                }
+                await AddOccurrence(linkedData, occurrenceFieldData.LinkedFieldData!, occurrenceFieldName, occ);
+              }
+              break;
+
+            case { IsLinkIdField: true }:
+              await AddOccurrence(node, occurrenceFieldData!.LinkedField!, occurrenceFieldData.LinkedField!.Name!, occ);
+              break;
+
+            case { IsMultiLingual: true }:
+
+              var languages = new JsonObject();
+              foreach (var (language, languageElement) in occurrence.Elements)
+              {
+                languages[!string.IsNullOrEmpty(language) ? language : "@none"] = languageElement.ToString();
+              }
+              node.Add(occurrenceNodeName, languages);
+              break;
+
+            case { IsEnumeration: true }:
+              node.Add(occurrenceNodeName, occurrence.NeutralValue);
+              break;
+
+            default:
+              node.Add(occurrenceNodeName, occurrence[""]);
+              break;
+          }
+
+          JsonObject GetLinkedDataFromNode(string linkedDatabase, int linkedId)
+          {
+            JsonObject GetNewLinkedObject()
+            {
+              var result = new JsonObject();
+              result.AddId(linkedDatabase, linkedId, options);
+              return result;
+            }
+
+            JsonObject GetLinkedObjectFromArray(JsonArray array)
+            {
+              if (array.ElementAtOrDefault(occ - 1) is not JsonObject linkedData)
+              {
+                linkedData = GetNewLinkedObject();
+                array.Add(linkedData);
+              }
+              return linkedData;
+            }
+
+            JsonObject GetLinkedDataFromNode(JsonNode array)
+            {
+              if (node[occurrenceNodeName] is not JsonObject linkedData)
+              {
+                node[occurrenceNodeName] = linkedData = GetNewLinkedObject();
+              }
+              return linkedData;
+            }
+
+            return node is JsonArray array ?
+              GetLinkedObjectFromArray(array) : GetLinkedDataFromNode(node);
+          }
         }
       }
     }
-    return nodeName;
-  }
 
-  private static string? GetLinkedDataId(FieldData fieldData, Element linkId, SerializeOptions options)
-  {
-    string? result = null;
-
-    if (fieldData.Type == FieldTypeEnum.Image && options.IIIF != null)
+    if (options?.LDContext != null)
     {
-      result = $"{options.IIIF}/{linkId}/full/max/0/default.jpg";
+      recordObject["@context"] = options.LDContext;
     }
-    else
+
+    recordObject.AddId(Database!.Name!, Id, options);
+    recordObject.AddField("creation", Creation, options);
+    recordObject.AddField("modification", Modification, options);
+
+    var fields = options?.Fields ?? [];
+    if (fields.Count == 0 || fields.Contains("*"))
     {
-      var database = fieldData.LinkedDatabase?.Name;
-      if (database != null && options.Databases != null &&
-          options.Databases.Contains(database) &&
-          options.API != null && options.NAAN != null &&
-          linkId.IntValue is int identifier)
+      fields.Remove("*");
+      fields = [.. fields, .. Fields.Keys];
+    }
+    foreach (var field in fields)
+    {
+      if (DatabaseNotNull.FindFieldByTagOrName(field) is { } fieldData)
       {
-        result = GetLinkedDataId(database, identifier, options);
+        await AddFieldAsync(recordObject, fieldData, field);
       }
     }
+
     return result;
   }
-
-  private static string? GetLinkedDataId(string database, int id, SerializeOptions options)
-  {
-    var url = $"{options.API}/ark:/{options.NAAN}";
-    var arkName = $"{database}{(database != null ? "/" : "")}{id}";
-    return $"{url}/{arkName}";
-  }
-
-  private static void AddElementToNode(JsonNode node, string name, Element element)
-  {
-    if (node is JsonArray array)
-    {
-      array.Add(element.ToString());
-    }
-    else
-    {
-      node[name] = element.ToString();
-    }
-  }
-
-  private static void AddNodeToNode(JsonNode node, string name, JsonNode addition)
-  {
-    if (node is JsonArray array)
-    {
-      array.Add(addition);
-    }
-    else
-    {
-      node[name] = addition;
-    }
-  }
-
-  private static string EncodeFieldName(string fieldName) => fieldName.Replace('.', '-');
-
 
   private static void Serialize(FieldData fieldData, XElement recordElement, string tag, OccurrenceList occurrences)
   {
@@ -1151,48 +1190,74 @@ public class Record : IRecord
 
   public int RepCount(string fieldNameOrTag)
   {
-    if (fieldNameOrTag == "identifier")
+    if (FieldData.IsIdentifier(fieldNameOrTag))
     {
       return 1;
     }
 
     int result = 0;
     var (root, _) = FieldData.GetRoot(fieldNameOrTag);
-    foreach (var field in FindFields(root))
+    foreach (var field in FindFields())
     {
-      var tag = field.PhysicalTag;
-      if (tag != null && Fields.TryGetValue(tag, out var occurrences))
+      if (Fields.TryGetValue(field.PhysicalTag!, out var occurrences))
       {
         result = Math.Max(occurrences.Count, result);
       }
+      // Also test the tag itself, it might be unresolved
+      if (Fields.TryGetValue(field.Tag!, out var tagOccurrences))
+      {
+        result = Math.Max(tagOccurrences.Count, result);
+      }
     }
     return result;
+
+    List<FieldData> FindFields()
+    {
+      var fieldData = Database?.FindFieldByTagOrName(root);
+      if (fieldData is not null)
+      {
+        return [fieldData!];
+      }
+      var fields = Database?.FindGroup(root);
+
+      if (fields == null || fields.Count == 0)
+      {
+        throw new FieldNotFoundException(root, Database!.Name);
+      }
+      return fields;
+    }
   }
 
-  private List<FieldData> FindFields(string groupOrFieldNameOrTag)
-  {
-    var fieldData = Database?.FindFieldByTagOrName(groupOrFieldNameOrTag);
-    if (fieldData != null)
-    {
-      return [fieldData!];
-    }
-    var fields = Database?.FindGroup(groupOrFieldNameOrTag);
 
-    if (fields == null || fields.Count == 0)
-    {
-      throw new FieldNotFoundException(groupOrFieldNameOrTag, Database!.Name);
-    }
-    return fields;
-  }
-
-  public async Task<IndexChangesList> CreateIndexKeysAsync(IDbConnection connection,
-                                                           IDbTransaction transaction,
-                                                           CancellationToken cancellationToken)
+  public async Task<IndexChangesList> CreateIndexKeysAsync(SqlStateInfo sqlState)
   {
+    async Task<IndexChanges> CreateIndexKeysAsync(IndexData index, SqlStateInfo sqlState)
+    {
+      var indexTag = index.IndexTags.FirstOrDefault() ??
+        throw new DDException("IndexTag is missing");  // use the first tag as the index tag, the rest is secondary
+
+      var changes = new IndexChanges(index);
+      foreach (var tag in index.IndexTags)
+      {
+        if (tag != "%0")
+        {
+          if (Fields.TryGetValue(tag, out var occurrences) && occurrences is not null)
+          {
+            await CreateIndexKeysForOccurrenceAsync(indexTag, occurrences, changes, 1, sqlState);
+          }
+          if (Original is not null && Original.Fields.TryGetValue(tag, out occurrences) && occurrences is not null)
+          {
+            await Original.CreateIndexKeysForOccurrenceAsync(indexTag, occurrences, changes, -1, sqlState);
+          }
+        }
+      }
+      return changes;
+    }
+
     var result = new IndexChangesList();
     foreach (var index in DatabaseNotNull.Indexes)
     {
-      var changes = await CreateIndexKeysAsync(connection, transaction, index, cancellationToken);
+      var changes = await CreateIndexKeysAsync(index, sqlState);
       if (changes.Count != 0)
       {
         result.Add(changes);
@@ -1201,249 +1266,250 @@ public class Record : IRecord
     return result;
   }
 
-  private async Task<IndexChanges> CreateIndexKeysAsync(IDbConnection connection, IDbTransaction transaction,
-                                                        IndexData index, CancellationToken cancellationToken)
-  {
-    var indexTag = index.IndexTags.FirstOrDefault() ??
-      throw new DDException("IndexTag is missing");  // use the first tag as the index tag, the rest is secondary
 
-    var changes = new IndexChanges(index);
-    foreach (var tag in index.IndexTags)
+  private async Task CreateIndexKeysForOccurrenceAsync(string indexTag, OccurrenceList occurrences, IndexChanges changes,
+                                                       int count, SqlStateInfo sqlState)
+  { 
+    var index = changes.Index;
+    if (index is null)
     {
-      if (tag != "%0")
+      throw new NullReferenceException(nameof(index));
+    }
+
+    int occ = 1;
+
+    async Task CreateIndexKeysForElement(string language, Element element)
+    {
+      void AddCount(string? domain, Element element, int count)
       {
-        if (Fields.TryGetValue(tag, out var occurrences) && occurrences != null)
+        var row = new TermIndexRow(index, indexTag, occ, element.Value, index.HasDomain ? domain : null, language, Id);
+        changes.FindOrCreateRow(row).Count += count;
+      }
+
+      void AddDomains(Element element, int count)
+      {
+        var domainTag = index.DomainTag ?? throw new NullReferenceException(nameof(index.DomainTag));
+
+        for (int domainOcc = 1; domainOcc <= Fields.RepCount(domainTag); domainOcc++)
         {
-          await CreateIndexKeysForOccurrenceAsync(connection, transaction, indexTag, occurrences, changes, 1, cancellationToken);
+          var domain = Fields.GetData(domainTag, domainOcc);
+          if (!string.IsNullOrEmpty(domain))
+          {
+            AddCount(domain, element, count);
+          }
         }
-        if (Original != null && Original.Fields.TryGetValue(tag, out occurrences) && occurrences != null)
+        AddCount("", element, count);
+      }
+
+      async Task CreateFreeTextIndexKeysAsync()
+      {
+        if (element is not null)
         {
-          await Original.CreateIndexKeysForOccurrenceAsync(connection, transaction, indexTag, occurrences, changes, -1, cancellationToken);
+          var words = TextTokenizer.GetWords(element.Value);
+          var wordNumbers = await WordList.GetWordNumbers(provider!.Repository, words, language, sqlState);
+          foreach (var wordNumber in wordNumbers)
+          {
+            var row = new IntegerIndexRow(changes.Index, wordNumber, Id);
+            changes.FindOrCreateRow(row).Count += count;
+          }
         }
       }
-    }
-    return changes;
-  }
 
-  private async Task CreateIndexKeysForOccurrenceAsync(IDbConnection connection, IDbTransaction transaction,
-                                                       string indexTag,
-                                                       OccurrenceList occurrences, IndexChanges changes,
-                                                       int count, CancellationToken cancellationToken)
-  {
-    int occ = 1;
+      void CreateTextIndexKeys()
+      {
+        if (element.Value != null)
+        {
+          if (index.HasDomain)
+          {
+            AddDomains(element, count);
+          }
+          else
+          {
+            AddCount(null, element, count);
+          }
+        }
+      }
+
+      void CreateIntegerIndexKeys()
+      {
+        int? key = null;
+        if (element.Value is not null)
+        {
+          if (element.Value is string)
+          {
+            var v = element.Value.ToString();
+            if (!string.IsNullOrWhiteSpace(v))
+            {
+              key = int.Parse(v);
+            }
+          }
+          else
+          {
+            key = (int)element.Value;
+          }
+
+          if (key is not null)
+          {
+            var row = new IntegerIndexRow(changes.Index, (int)key, Id);
+            changes.FindOrCreateRow(row).Count += count;
+          }
+        }
+      }
+
+      void CreateIsoDateIndexKeys()
+      {
+        if (element.Value is not null && !string.IsNullOrEmpty(element.Value.ToString()))
+        {
+          var row = new IsoDateIndexRow(index, element.Value, Id);
+          changes.FindOrCreateRow(row).Count += count;
+        }
+      }
+
+      void CreateDateIndexKeys()
+      {
+        if (element.Value != null)
+        {
+          var row = new DateIndexRow(changes.Index, element.Value, Id);
+          changes.FindOrCreateRow(row).Count += count;
+        }
+      }
+
+      void CreateBooleanIndexKeys()
+      {
+        if (element.Value != null)
+        {
+          var stringValue = element.Value.ToString();
+          if (!string.IsNullOrEmpty(stringValue))
+          {
+            var row = new BooleanIndexRow(changes.Index, stringValue, Id);
+            changes.FindOrCreateRow(row).Count += count;
+          }
+        }
+      }
+
+      void CreateAlphaNumericIndexKeys()
+      {
+        if (element.Value != null)
+        {
+          var row = new AlphaNumericIndexRow(changes.Index, indexTag, element.Value, Id);
+          changes.FindOrCreateRow(row).Count += count;
+        }
+      }
+
+      switch (changes.Index.Type)
+      {
+        case IndexTypeEnum.Text:
+          CreateTextIndexKeys();
+          break;
+
+        case IndexTypeEnum.Integer:
+          CreateIntegerIndexKeys();
+          break;
+
+        case IndexTypeEnum.FreeText:
+          if (Database!.IsFullTextEnabled)
+          {
+            CreateTextIndexKeys();
+          }
+          else
+          {
+            await CreateFreeTextIndexKeysAsync();
+          }
+          break;
+
+        case IndexTypeEnum.IsoDate:
+          CreateIsoDateIndexKeys();
+          break;
+
+        case IndexTypeEnum.Date:
+          CreateDateIndexKeys();
+          break;
+
+        case IndexTypeEnum.Boolean:
+          CreateBooleanIndexKeys();
+          break;
+
+        case IndexTypeEnum.AlphaNumeric:
+          CreateAlphaNumericIndexKeys();
+          break;
+
+        default:
+          throw new DDException($"Index type '{changes.Index.Type}' for tag '{indexTag}' is not supported.");
+      }
+    }
+
+    void CreateEnumIndexKeysForElement(object neutralValue)
+    {
+      var row = new TermIndexRow(changes.Index, indexTag, occ, neutralValue, Id);
+      changes.FindOrCreateRow(row).Count += count;
+    }
+
     foreach (var occurrence in occurrences)
     {
       if (occurrence.NeutralValue != null)
       {
-        CreateEnumIndexKeysForElement(indexTag, occ, changes, count, occurrence.NeutralValue);
+        CreateEnumIndexKeysForElement(occurrence.NeutralValue);
       }
       else
       {
         foreach (var (language, element) in occurrence.Elements)
         {
-          await CreateIndexKeysForElement(connection, transaction, indexTag, occ, changes, count, language, element, cancellationToken);
+          await CreateIndexKeysForElement(language, element);
         }
       }
       occ++;
     }
   }
 
-  private async Task CreateIndexKeysForElement(IDbConnection connection, IDbTransaction transaction,
-                                               string indexTag,
-                                               int occ, IndexChanges changes, int count, string language, Element element,
-                                               CancellationToken cancellationToken)
-  {
-    switch (changes.Index.Type)
-    {
-      case IndexTypeEnum.Text:
-        CreateTextIndexKeys(indexTag, occ, changes, count, language, element);
-        break;
-
-      case IndexTypeEnum.Integer:
-        CreateIntegerIndexKeys(changes, count, element);
-        break;
-
-      case IndexTypeEnum.FreeText:
-        if (Database!.FullText)
-        {
-          CreateTextIndexKeys(indexTag, occ, changes, count, language, element);
-        }
-        else
-        {
-          await CreateFreeTextIndexKeysAsync(connection, transaction, changes, count, language, element, cancellationToken);
-        }
-        break;
-
-      case IndexTypeEnum.IsoDate:
-        CreateIsoDateIndexKeys(changes, count, element);
-        break;
-
-      case IndexTypeEnum.Date:
-        CreateDateIndexKeys(changes, count, element);
-        break;
-
-      case IndexTypeEnum.Boolean:
-        CreateBooleanIndexKeys(changes, count, element);
-        break;
-
-      case IndexTypeEnum.AlphaNumeric:
-        CreateAlphaNumericIndexKeys(indexTag, changes, count, element);
-        break;
-
-      default:
-        throw new DDException($"Index type '{changes.Index.Type}' for tag '{indexTag}' is not supported.");
-    }
-  }
-
-  private void CreateBooleanIndexKeys(IndexChanges changes, int count, Element element)
-  {
-    if (element.Value != null)
-    {
-      var stringValue = element.Value.ToString();
-      if (!string.IsNullOrEmpty(stringValue))
-      {
-        var row = new BooleanIndexRow(changes.Index, stringValue, Id);
-        changes.FindOrCreateRow(row).Count += count;
-      }
-    }
-  }
-
-  private void CreateDateIndexKeys(IndexChanges changes, int count, Element element)
-  {
-    if (element.Value != null)
-    {
-      var row = new DateIndexRow(changes.Index, element.Value, Id);
-      changes.FindOrCreateRow(row).Count += count;
-    }
-  }
-
-  private async Task CreateFreeTextIndexKeysAsync(IDbConnection connection, IDbTransaction transaction,
-                                                  IndexChanges changes, int count, string language,
-                                                  Element element, CancellationToken cancellationToken)
-  {
-    if (element != null)
-    {
-      var words = TextTokenizer.GetWords(language, element.Value);
-      var wordNumbers = await WordList.GetWordNumbers(connection, transaction, provider!.Repository, words, language, cancellationToken);
-      foreach (var wordNumber in wordNumbers)
-      {
-        var row = new IntegerIndexRow(changes.Index, wordNumber, Id);
-        changes.FindOrCreateRow(row).Count += count;
-      }
-    }
-  }
-
-  private void CreateIsoDateIndexKeys(IndexChanges changes, int count, Element element)
-  {
-    if (element.Value != null && !string.IsNullOrEmpty(element.Value.ToString()))
-    {
-      var index = changes.Index;
-      var row = new IsoDateIndexRow(index, element.Value, Id);
-      changes.FindOrCreateRow(row).Count += count;
-    }
-  }
-
-  private void CreateIntegerIndexKeys(IndexChanges changes, int count, Element element)
-  {
-    int? key = null;
-    if (element.Value != null)
-    {
-      if (element.Value is string)
-      {
-        var v = element.Value.ToString();
-        if (!string.IsNullOrWhiteSpace(v))
-        {
-          key = int.Parse(v);
-        }
-      }
-      else
-      {
-        key = (int)element.Value;
-      }
-
-      if (key == null)
-      {
-        throw new NullReferenceException(nameof(key));
-      }
-      var row = new IntegerIndexRow(changes.Index, (int)key, Id);
-      changes.FindOrCreateRow(row).Count += count;
-    }
-  }
-
-  private void CreateTextIndexKeys(string? tag, int occ, IndexChanges changes, int count, string language, Element element)
-  {
-    if (element.Value != null)
-    {
-      var index = changes.Index;
-      if (index.HasDomain)
-      {
-        AddDomains(index, tag, occ, language, element, changes, count);
-      }
-      else
-      {
-        AddCount(index, tag, occ, language, null, element, changes, count);
-      }
-    }
-  }
-
-  private void CreateAlphaNumericIndexKeys(string tag, IndexChanges changes, int count, Element element)
-  {
-    if (element.Value != null)
-    {
-      var row = new AlphaNumericIndexRow(changes.Index, tag, element.Value, Id);
-      changes.FindOrCreateRow(row).Count += count;
-    }
-  }
-
-  private void CreateEnumIndexKeysForElement(string tag, int occ, IndexChanges changes, int count, object neutralValue)
-  {
-    var row = new TermIndexRow(changes.Index, tag, occ, neutralValue, Id);
-    changes.FindOrCreateRow(row).Count += count;
-  }
-
-  private void AddDomains(IndexData index, string? tag, int occ, string language, Element element, IndexChanges changes, int count)
-  {
-    var domainTag = index.DomainTag ?? throw new NullReferenceException(nameof(index.DomainTag));
-
-    for (int domainOcc = 1; domainOcc <= Fields.RepCount(domainTag); domainOcc++)
-    {
-      var domain = Fields.GetData(domainTag, domainOcc);
-      if (!string.IsNullOrEmpty(domain))
-      {
-        AddCount(index, tag, occ, language, domain, element, changes, count);
-      }
-    }
-    AddCount(index, tag, occ, language, "", element, changes, count);
-  }
-
-  private void AddCount(IndexData index, string? tag, int occ, string language, string? domain, Element element, IndexChanges changes, int count)
-  {
-    var row = new TermIndexRow(index, tag, occ, element.Value, index.HasDomain ? domain : null, language, Id);
-    changes.FindOrCreateRow(row).Count += count;
-  }
-
   public override string ToString() => $"{Database} {Id}";
 
-  public async Task ResolveLinksAsync(IDbConnection connection,
-                                      IDbTransaction transaction,
-                                      CancellationToken cancellationToken)
+  public async Task ResolveLinksAsync(SqlStateInfo sqlState)
   {
     foreach (var (tag, occurrences) in Fields.Clone())
     {
-      var fieldData = Database!.FindFieldByTagOrName(tag) ??
-        throw new FieldNotFoundException(tag, Database.Name);
+      var fieldData = Database!.FindFieldByTagOrName(tag) ?? throw new FieldNotFoundException(tag, Database.Name);
       if (fieldData.IsLinked)
       {
-        await ResolveLinkAsync(fieldData, occurrences,
-                               connection, transaction, cancellationToken);
+        await ResolveLinkAsync(fieldData, occurrences, sqlState);
       }
     }
   }
 
 
-  public async Task ProcessReverseLinksAsync(IDbConnection currentConnection, IDbTransaction currentTransaction,
-                                             CancellationToken cancellationToken)
+  public async Task ProcessReverseLinksAsync(SqlStateInfo sqlState)
   {
+    async Task ProcessReverseLinkAsync(DatabaseData linkedDatabase, string linkReverseTag,
+                                          OccurrenceList linkIdOccurrences, SqlStateInfo sqlState)
+    {
+      async Task ProcessReverseLinkIdAsync(DatabaseData linkedDatabase, string linkReverseTag, int id, SqlStateInfo sqlState)
+      {
+        var record = await provider!.ReadRecordAsync(linkedDatabase, id, sqlState);
+        if (record != null)
+        {
+          record.User = User;
+          if (record.RepFind(linkReverseTag, Id) == 0)
+          {
+            record.Append(linkReverseTag, Id);
+            await record.WriteAsync(sqlState);
+          }
+        }
+      }
+
+      foreach (var occurrence in linkIdOccurrences)
+      {
+        if (occurrence.Elements.TryGetValue("", out var element))
+        {
+          var linkId = element.IntValue;
+          if (linkId.HasValue)
+          {
+            await ProcessReverseLinkIdAsync(linkedDatabase, linkReverseTag, linkId.Value, sqlState);
+          }
+        }
+        // TODO: this should never happen
+      }
+    }
+
+    sqlState.ProcessingReverseLinks = true;
     foreach (var (tag, occurrences) in Fields)
     {
       var fieldData = Database!.FindFieldByTagOrName(tag) ??
@@ -1452,83 +1518,133 @@ public class Record : IRecord
            fieldData.LinkIdTag != null && fieldData.LinkedDatabase != null && fieldData.LinkReverseTag != null)
       {
         var linkIdOccurrences = Fields[fieldData.LinkIdTag];
-        await ProcessReverseLinkAsync(fieldData.LinkedDatabase, fieldData.LinkReverseTag, linkIdOccurrences,
-                                      currentConnection, currentTransaction, cancellationToken);
+        await ProcessReverseLinkAsync(fieldData.LinkedDatabase, fieldData.LinkReverseTag, linkIdOccurrences, sqlState);
       }
     }
+    sqlState.ProcessingReverseLinks = false;
   }
 
-  private async Task ProcessReverseLinkAsync(DatabaseData linkedDatabase, string linkReverseTag, OccurrenceList linkIdOccurrences, IDbConnection connection,
-    IDbTransaction transaction, CancellationToken cancellationToken)
+  private async Task ResolveLinkAsync(FieldData fieldData, OccurrenceList occurrences, SqlStateInfo sqlState)
   {
-    foreach (var occurrence in linkIdOccurrences)
+    async Task ResolveLinkAsync(FieldData fieldData, Occurrence occurrence, int occ, SqlStateInfo sqlState)
     {
-      if (occurrence.Elements.TryGetValue("", out var element))
+      foreach (var (language, element) in occurrence.Elements)
       {
-        var linkId = element.IntValue;
-        if (linkId.HasValue)
-        {
-          await ProcessReverseLinkIdAsync(linkedDatabase, linkReverseTag, linkId.Value,
-                                          connection, transaction, cancellationToken);
-        }
-      }
-      // TODO: this should never happen
-    }
-  }
-
-  private async Task ProcessReverseLinkIdAsync(DatabaseData linkedDatabase, string linkReverseTag, int id,
-                                               IDbConnection connection, IDbTransaction transaction, CancellationToken cancellationToken)
-  {
-    var record = await provider!.ReadRecordAsync(linkedDatabase, id, connection, transaction, cancellationToken);
-    if (record != null)
-    {
-      record.User = User;
-      if (record.RepFind(linkReverseTag, Id) == 0)
-      {
-        record.Append(linkReverseTag, Id);
-        await record.WriteAsync(connection, transaction, cancellationToken);
+        await this.ResolveLinkAsync(fieldData, language, element, occ, sqlState);
       }
     }
-  }
 
-  private async Task ResolveLinkAsync(FieldData fieldData, OccurrenceList occurrences,
-                                    IDbConnection connection,
-                                    IDbTransaction transaction,
-                                    CancellationToken cancellationToken)
-  {
     int occ = 1;
     foreach (var occurrence in occurrences)
     {
-      await ResolveLinkAsync(fieldData, occurrence, occ++,
-                             connection, transaction, cancellationToken);
+      await ResolveLinkAsync(fieldData, occurrence, occ++, sqlState);
     }
   }
 
-  private async Task ResolveLinkAsync(FieldData fieldData, Occurrence occurrence, int occ,
-                                      IDbConnection connection, IDbTransaction transaction,
-                                      CancellationToken cancellationToken)
+  private async Task ResolveLinkAsync(FieldData fieldData, string language, Element element, int occ, SqlStateInfo sqlState)
   {
-    foreach (var (language, element) in occurrence.Elements)
+    async Task<int> ResolveLinkAsync(FieldData linkFieldData, DatasetData? linkDataset,
+                                         string? domain, string term, string language, SqlStateInfo sqlState)
     {
-      await ResolveLinkAsync(fieldData, language, element, occ,
-                             connection, transaction, cancellationToken);
-    }
-  }
+      /// <summary>
+      ///  Add a domain to an existing linked existing record
+      /// </summary>
+      /// <param name="linkFieldData">The field for which to add the domain.</param>
+      /// <param name="id">The record number of the linked record to add the domain to.</param>
+      /// <param name="domain">The domain that we want to add.</param>
+      /// <param name="cancellationToken">Cancellation token to abort the adding</param>
+      /// <returns>nothing</returns>
+      /// <exception cref="NullReferenceException">If the linked record could not be found,</exception>
+      async Task AddDomainToLinkedRecord(int id, string domain)
+      {
+        var record = await provider!.ReadRecordAsync(linkFieldData.Database ??
+          throw new NullReferenceException(nameof(linkFieldData.Database)), id, sqlState);
+        if (record is null)
+        {
+          throw new NullReferenceException(nameof(record));
+        }
+        record.User = User;
+        var domainTag = linkFieldData.GetDomainTag();
+        if (record.RepFind(domainTag, domain) == 0)
+        {
+          var occ = record.RepCount(domainTag) + 1;
+          record.Set(domainTag, occ, domain);
+          await record.WriteAsync(sqlState);
+        }
+      }
 
-  private async Task ResolveLinkAsync(FieldData fieldData, string language, Element element, int occ,
-                                      IDbConnection connection,
-                                      IDbTransaction transaction,
-                                      CancellationToken cancellationToken)
-  {
-    if (fieldData.LinkIdTag == null)
+      async Task<int> ForceLinkAsync(string? domain, string term, string language)
+      {
+        if (fieldData.ForcingAllowed)
+        {
+          var database = linkFieldData.Database ?? throw new NullReferenceException(nameof(linkFieldData.Database));
+          var databaseName = database.Name ?? throw new NullReferenceException(nameof(database.Name));
+          var record = new Record(provider!, Path.GetDirectoryName(database.FileName)!, databaseName, linkFieldData.LinkedDataset)
+          {
+            DefaultLanguage = DefaultLanguage,
+            User = User
+          };
+          record.Set(linkFieldData, 1, language, term, true);
+
+          if (domain is not null)
+          {
+            record.Set(linkFieldData.GetDomainTag(), domain);
+          }
+
+          await provider!.WriteRecordAsync(record, sqlState);
+          return record.Id;
+        }
+        throw new ForcingIsNotAlllowedException(fieldData.Database.Name!, fieldData.Name!);
+      }
+
+      var index = linkFieldData.PreferredIndex ??
+            throw new NullReferenceException(nameof(linkFieldData.PreferredIndex));
+      var termValue = KeyConversions.TermValue(term, index.Length);
+      var repository = provider!.Repository;
+      var fullText = linkFieldData.Database.IsFullTextEnabled;
+      string table = fullText ? linkFieldData.Database.FullTextTable : index.TableName;
+      var tag = fullText ? linkFieldData.Tag : null;
+      int linkId = 0;
+      if (domain is not null)
+      {
+        // if there is first try to find the link with the domain
+        linkId = await repository.FindLink(table, linkDataset, tag, domain, termValue, linkFieldData.IsMultiLingual, language, sqlState);
+      }
+      if (linkId is 0)
+      {
+        // link with domain not found, now try without a domain
+        linkId = await repository.FindLink(table, linkDataset, tag, null, termValue, linkFieldData.IsMultiLingual, language, sqlState);
+        if (linkId == 0)
+        {
+          // still not found, force it in if this is allowed
+          linkId = await ForceLinkAsync(domain, term, language);
+        }
+        else
+        {
+          if (domain is not null)
+          {
+            await AddDomainToLinkedRecord(linkId, domain);
+          }
+        }
+      }
+
+      return linkId;
+    }
+
+    if (fieldData.LinkIdTag is null)
     {
       throw new NullReferenceException(nameof(fieldData.LinkIdTag));
     }
 
+    async Task<string?> GetDomainAsync(FieldData fieldData)
+     => !string.IsNullOrWhiteSpace(fieldData.LinkDomain) ? fieldData.LinkDomain :
+        !string.IsNullOrEmpty(fieldData.LinkDomainTag) ? (await GetAsync(fieldData.LinkDomainTag, 1, "")) : null;
+
+
     var term = element.ToString();
     if (term != null)
     {
-      var domain = await GetDomainAsync(fieldData, connection, transaction, cancellationToken);
+      var domain = await GetDomainAsync(fieldData);
       var linkedDatabase = fieldData.LinkedDatabase ??
         throw new NullReferenceException(nameof(fieldData.LinkedDatabase));
       var linkField = linkedDatabase.FindFieldByTagOrName(fieldData.LinkIndexTag!)!;
@@ -1536,9 +1652,7 @@ public class Record : IRecord
       var linkDataset = string.IsNullOrEmpty(linkedDatasetName) ? null :
         linkedDatabase.FindDatasetByName(linkedDatasetName);
 
-      var linkId = await ResolveLinkAsync(linkField, linkDataset,
-                                          domain, term, language,
-                                          connection, transaction, cancellationToken);
+      var linkId = await ResolveLinkAsync(linkField, linkDataset, domain, term, language, sqlState);
       if (linkId == 0)
       {
         throw new DDException($"Cannot resolve link for field {fieldData.Name}, term = {term}, domain = {domain}");
@@ -1547,134 +1661,52 @@ public class Record : IRecord
     }
   }
 
-  private async Task<int> ResolveLinkAsync(FieldData linkFieldData, DatasetData? linkDataset,
-                                           string? domain, string term, string language,
-                                           IDbConnection connection,
-                                           IDbTransaction transaction,
-                                           CancellationToken cancellationToken)
-  {
-    var index = linkFieldData.PreferredIndex ??
-      throw new NullReferenceException(nameof(linkFieldData.PreferredIndex));
-    var termValue = KeyConversions.TermValue(term, index.Length);
-    var repository = provider!.Repository;
-    var fullText = linkFieldData.Database.FullText;
-    string table = fullText ? linkFieldData.Database.FullTextTable : index.TableName;
-    int linkId = 0;
-    if (domain != null)
-    {
-      // if there is first try to find the link with the domain
-      linkId = await repository.FindLink(table, linkDataset, domain, termValue, language,
-                                             connection, transaction, cancellationToken);
-    }
-    if (linkId == 0)
-    {
-      // link with domain not found, now try without a domain
-      linkId = await repository.FindLink(table, linkDataset, null, termValue, language,
-                                         connection, transaction, cancellationToken);
-      if (linkId == 0)
-      {
-        // still not found, force it in if this is allowed
-        linkId = await ForceLinkAsync(linkFieldData, domain, term, language, User,
-                                      connection, transaction, cancellationToken);
-      }
-      else
-      {
-        if (domain != null)
-        {
-          await AddDomainToLinkedRecord(linkFieldData, linkId, domain, User, connection, transaction, cancellationToken);
-        }
-      }
-    }
-
-    return linkId;
-  }
-
   /// <summary>
-  ///  Add a domain to an existing linked existing record
+  /// Write this record to the database (Async version)
   /// </summary>
-  /// <param name="linkFieldData">The field for which to add the domain.</param>
-  /// <param name="id">The record number of the linked record to add the domain to.</param>
-  /// <param name="domain">The domain that we want to add.</param>
-  /// <param name="cancellationToken">Cancellation token to abort the adding</param>
-  /// <returns>nothing</returns>
-  /// <exception cref="NullReferenceException">If the linked record could not be found,</exception>
-  private async Task AddDomainToLinkedRecord(FieldData linkFieldData, int id, string domain, string? user,
-                                             IDbConnection connection,
-                                             IDbTransaction transaction,
-                                             CancellationToken cancellationToken)
-  {
-    var record = await provider!.ReadRecordAsync(linkFieldData.Database ??
-      throw new NullReferenceException(nameof(linkFieldData.Database)), id, connection, transaction, cancellationToken);
-    if (record == null)
-    {
-      throw new NullReferenceException(nameof(record));
-    }
-    record.User = user;
-    var domainTag = linkFieldData.GetDomainTag();
-    if (record.RepFind(domainTag, domain) == 0)
-    {
-      var occ = record.RepCount(domainTag) + 1;
-      record.Set(domainTag, occ, domain);
-      await record.WriteAsync(connection, transaction, cancellationToken);
-    }
-  }
-
-  private async Task<int> ForceLinkAsync(FieldData linkFieldData, string? domain, string term, string language,
-                                         string? user,
-                                         IDbConnection connection,
-                                         IDbTransaction transaction,
-                                         CancellationToken cancellationToken)
-  {
-    var database = linkFieldData.Database ?? throw new NullReferenceException(nameof(linkFieldData.Database));
-    var databaseName = database.Name ?? throw new NullReferenceException(nameof(database.Name));
-    var record = new Record(provider!, database.Folder!, databaseName, linkFieldData.LinkedDataset)
-    {
-      DefaultLanguage = DefaultLanguage,
-      User = user
-    };
-    record.Set(linkFieldData, 1, language, term, true);
-
-    if (domain != null)
-    {
-      record.Set(linkFieldData.GetDomainTag(), domain);
-    }
-
-    await provider!.WriteRecordAsync(record, connection, transaction, cancellationToken);
-    return record.Id;
-  }
-
-  private async Task<string?> GetDomainAsync(FieldData fieldData,
-    IDbConnection connection, IDbTransaction transaction, CancellationToken cancellationToken)
-  => !string.IsNullOrWhiteSpace(fieldData.LinkDomain) ? fieldData.LinkDomain :
-     !string.IsNullOrEmpty(fieldData.LinkDomainTag) ?
-     (await GetAsync(fieldData.LinkDomainTag, 1, "",
-                     connection, transaction, cancellationToken)) : null;
-
+  /// <returns>Nothing</returns>
+  public Task WriteAsync(SqlStateInfo? sqlState = default, RecordWriteOptionsFlag? writeOptions = RecordWriteOptionsFlag.None) =>
+     provider!.WriteRecordAsync(this, sqlState!, writeOptions);
 
   /// <summary>
   /// Write this record to the database (Async version)
   /// </summary>
   /// <returns>Nothing</returns>
-  public Task WriteAsync(IDbConnection? connection = null, IDbTransaction? transaction = null, CancellationToken cancellationToken = default) =>
-     provider!.WriteRecordAsync(this, connection, transaction, cancellationToken);
+  public Task WriteAsync(RecordWriteOptionsFlag? writeOptions = RecordWriteOptionsFlag.None, CancellationToken cancellationToken = default) =>
+     provider!.WriteRecordAsync(this, new SqlStateInfo { CancellationToken = cancellationToken }, writeOptions);
+
+  /// <summary>
+  /// Write this record to the database (Async version)
+  /// </summary>
+  /// <returns>Nothing</returns>
+  public Task WriteAsync(CancellationToken cancellationToken = default) =>
+     provider!.WriteRecordAsync(this, new SqlStateInfo { CancellationToken = cancellationToken });
 
   /// <summary>
   /// Delete this record from the database
   /// </summary>
   /// <param name="cancellationToken"></param>
   /// <returns>Nothing</returns>
-  public Task DeleteAsync(CancellationToken cancellationToken) =>
-     provider!.DeleteRecordAsync(this, cancellationToken);
+  public Task DeleteAsync(CancellationToken cancellationToken = default) =>
+   provider!.DeleteRecordAsync(this, cancellationToken);
 
   /// <summary>
   /// Write this record to the database.
   /// </summary>
-  public void Write(IDbConnection? connection = null,
-                    IDbTransaction? transaction = null,
-                    CancellationToken cancellationToken = default)
+  public void Write()
   {
-    var task = Task.Run(() => WriteAsync(connection, transaction, cancellationToken), cancellationToken);
-    task?.Wait(cancellationToken);
+    var sqlState = SqlStateInfo.Default;
+    var task = Task.Run(() => WriteAsync(sqlState));
+    task?.Wait(sqlState.CancellationToken);
+  }
+
+  /// <summary>
+  /// Write this record to the database.
+  /// </summary>
+  public void Write(SqlStateInfo sqlState)
+  {
+    var task = Task.Run(() => WriteAsync(sqlState));
+    task?.Wait(sqlState.CancellationToken);
   }
 
   public int RepFind(string tagOrFieldName, object value, string language = "")
@@ -1723,15 +1755,13 @@ public class Record : IRecord
     return occ;
   }
 
-  public async Task<bool> LinkIdPresent(string tag, int value,
-                                   IDbConnection connection, IDbTransaction transaction,
-                                   CancellationToken cancellationToken)
+  public async Task<bool> LinkIdPresent(string tag, int value, SqlStateInfo sqlState)
   {
     var result = false;
     var maxOcc = RepCount(tag);
     for (int occ = 1; !result && occ <= maxOcc; occ++)
     {
-      var id = await GetLinkIdAsync(tag, occ, connection, transaction, cancellationToken);
+      var id = await GetLinkIdAsync(tag, occ, sqlState);
       if (id.HasValue && id.Value == value)
       {
         result = true;
@@ -1741,15 +1771,15 @@ public class Record : IRecord
     return result;
   }
 
-  public void Set(FieldData fieldData, object? value) => Set(fieldData, 1, string.Empty, value);
+  public void Set(FieldData fieldData, object? value) => Set(fieldData, 1, "", value);
 
-  public void Set(FieldData fieldData, int occ, object? value) => Set(fieldData, occ, string.Empty, value);
+  public void Set(FieldData fieldData, int occ, object? value) => Set(fieldData, occ, "", value);
 
-  internal object? Get(string tagOrFieldName, int occ = 1) => Get(tagOrFieldName, occ, null, null, default);
+  public Task<string> Context(string fieldName, SqlStateInfo sqlState) => Context(fieldName, "/", sqlState);
 
-  internal object? Get(FieldData fieldData, int occ = 1) => Get(fieldData.Tag!, occ, null, null, default);
+  public Task<string> Context(string fieldName) => Context(fieldName, "/", SqlStateInfo.Default);
 
-  public async Task<string> Context(string fieldName, string separator = "/")
+  public async Task<string> Context(string fieldName, string separator, SqlStateInfo sqlState)
   {
     if (Database == null)
     {
@@ -1765,33 +1795,33 @@ public class Record : IRecord
     var parentIdTag = hierarchy.BroaderTermLinkIdTag ??
       throw new NullReferenceException(nameof(hierarchy.BroaderTermLinkIdTag));
 
-    return await ContextInternal(Database, fieldData, parentIdTag, separator);
+    return await ContextInternal(Database, fieldData, parentIdTag, separator, sqlState);
   }
 
-  private async Task<string> ContextInternal(DatabaseData database, FieldData fieldData, string parentIdTag, string separator)
+  private async Task<string> ContextInternal(DatabaseData database, FieldData fieldData, string parentIdTag, string separator,
+                                             SqlStateInfo sqlState)
   {
-    var result = await GetAsync(fieldData.Tag!) ?? string.Empty;
+    var result = await GetAsync(fieldData.Tag!, sqlState) ?? string.Empty;
 
-    var parentId = await GetAsync(parentIdTag, 1);
+    var parentId = await GetAsync(parentIdTag, 1, sqlState);
     if (parentId != null)
     {
-      var parentRecord = await provider!.ReadRecordAsync(database, int.Parse(parentId), null, null, default);
+      var parentRecord = await provider!.ReadRecordAsync(database, int.Parse(parentId), sqlState);
       if (parentRecord != null)
       {
-        result = await parentRecord.ContextInternal(database, fieldData, parentIdTag, separator) + separator + result;
+        result = await parentRecord.ContextInternal(database, fieldData, parentIdTag, separator, sqlState) + separator + result;
       }
     }
 
     return result;
   }
 
-  public async Task SetAutoNumberValue(IDbConnection connection, IDbTransaction transaction,
-                                 FieldData fieldData, CancellationToken cancellationToken)
-  => Set(fieldData, await provider!.GetAutoNumberValue(connection, transaction, fieldData, cancellationToken));
+  public async Task SetAutoNumberValue(FieldData fieldData, SqlStateInfo sqlState)
+  => Set(fieldData, await provider!.GetAutoNumberValue(fieldData, sqlState));
 
   public FieldData GetFieldData(string tagOrFieldName)
   {
-    if (Database == null)
+    if (Database is null)
     {
       throw new NullReferenceException(nameof(Database));
     }
@@ -1816,6 +1846,63 @@ public class Record : IRecord
     }
   }
 
+  private Element? FindElement(string tagOrFieldName, int occ, string language = "")
+  {
+    Element? result = null;
+    var fieldData = Database?.GetFieldByTagOrName(tagOrFieldName) ??
+      throw new FieldNotFoundException(tagOrFieldName, Database?.Name);
+    var tag = fieldData.Tag ?? throw new NullReferenceException(fieldData.Tag);
+    if (Fields.TryGetValue(tag, out var occurrences))
+    {
+      if (occ >= 1 && occ <= occurrences.Count)
+      {
+        var occurrence = occurrences[occ - 1] ?? throw new InvalidOccurrenceException(occ);
+        occurrence.Elements.TryGetValue(language, out result);
+      }
+    }
+    return result;
+  }
+
+  /// <summary>
+  /// Restores a previously modified version of the specified field occurrence and language.
+  /// </summary>
+  /// <param name="tagOrFieldName">Field name or tag</param>
+  /// <param name="occ">Occurrence</param>
+  /// <param name="language">Language</param>
+  /// <exception cref="DDException"></exception>
+  public void Undo(string tagOrFieldName, int occ = 1, string language = "")
+  {
+    var element = FindElement(tagOrFieldName, occ, language) ??
+      throw new ElementNotFoundException(Database?.Name, tagOrFieldName, occ, language);
+    element.Undo();
+  }
+
+  /// <summary>
+  /// Redoes a previously undone modification of the specified field occurrence and language.
+  /// </summary>
+  /// <param name="tagOrFieldName">Field name or tag</param>
+  /// <param name="occ">Occurrence</param>
+  /// <param name="language">Language</param>
+  /// <exception cref="DDException"></exception>
+  public void Redo(string tagOrFieldName, int occ = 1, string language = "")
+  {
+    var element = FindElement(tagOrFieldName, occ, language) ??
+       throw new ElementNotFoundException(Database?.Name, tagOrFieldName, occ, language);
+    element.Redo();
+  }
+
+  public void ForceRelinks()
+  {
+    foreach (var (tag, occurrence) in Fields)
+    {
+      var fieldData = Database!.FindFieldByTagOrName(tag);
+      if (fieldData is not null && (fieldData.IsLinked || fieldData.IsMergedField))
+      {
+        Fields[tag].Clear();
+      }
+    }
+  }
+
   /// <summary>
   /// Utility property to dump the record fields and their values.
   /// Handy during debugging or logging.
@@ -1835,8 +1922,8 @@ public class Record : IRecord
           foreach (var (language, element) in occurrence.Elements)
           {
             dump.Add($"""
-              {fieldData.Name}[{occ},'{language}'] = '{element}'
-              """);
+                                  {fieldData.Name}[{occ},'{language}'] = '{element}'
+                                  """);
           }
           occ++;
         }

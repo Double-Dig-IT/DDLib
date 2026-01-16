@@ -1,37 +1,62 @@
 ﻿namespace DDigit.MetaData;
 
-public class FieldData : FieldDData
+/// <summary>
+/// Metadata for a field.
+/// </summary>
+public class FieldData : FieldDData, IHasPropertyMap<FieldData>
 {
-  public FieldData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace, DatabaseData? database = null) :
-    base(objectType, stream, encoding, fileName, Properties, trace)
+  /// <summary>
+  /// Reading constructor
+  /// </summary>
+  /// <param name="objectType"></param>
+  /// <param name="stream"></param>
+  /// <param name="encoding"></param>
+  /// <param name="trace"></param>
+  /// <param name="database"></param>
+  public FieldData(ObjectTypeEnum objectType, FileStream stream, Encoding encoding, bool trace, DatabaseData? database = null) :
+    base(objectType, stream, encoding, Properties, trace)
   {
+    if (string.IsNullOrWhiteSpace(Tag))
+    {
+      throw new DDException($"Field definition for {Name} does not have a tag");
+    }
     // The field object is also used in tasks in applications
     // In this situation there is no database, so we cannot check if the field is a LinkRef
     // We need to check the database here to prevent crashes when reading an adlib.pbk object. 
     if (database != null)
     {
       this.database = database;
-      if (IsLinkRef && Type != FieldTypeEnum.Integer)
+      if (IsLinkIdField && Type != FieldTypeEnum.Integer)
       {
         Type = FieldTypeEnum.Integer; // fix this problem in the setup, do not throw an exception
         Console.WriteLine($"Warning: Link reference fields must be of type integer, '{database.Name}', '{Name} ({Tag})'");
         //throw new DDException($"Link reference fields must be of type integer, '{database!.Name}', '{Tag}'");
       }
+      LinkDomainField = database.FindFieldByTagOrName(LinkDomainTag);
     }
   }
 
-  internal FieldData()
+  /// <summary>
+  /// General constructor
+  /// </summary>
+  /// <remarks>
+  /// Made public for creation of FieldData using scripts
+  /// </remarks>
+  public FieldData() : base()
   {
-
+    ElementCount = 3;
   }
 
   private DatabaseData? database;
+  /// <summary>
+  /// The database to which this field belongs.
+  /// </summary>
   [JsonIgnore]
   public DatabaseData Database
   {
     get
     {
-      if (database == null)
+      if (database is null)
       {
         throw new NullReferenceException(nameof(database));
       }
@@ -250,7 +275,7 @@ public class FieldData : FieldDData
   /// <summary>
   /// Is this an enumerative field?
   /// </summary>
-  public bool Enumeration
+  public bool IsEnumeration
   {
     get;
     set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
@@ -264,6 +289,16 @@ public class FieldData : FieldDData
     get;
     set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   } = string.Empty;
+
+
+  /// <summary>
+  /// The field data for the link domain tag
+  /// </summary>
+  [JsonIgnore]
+  public FieldData? LinkDomainField
+  {
+    get; private set;
+  }
 
   /// <summary>
   /// Z39.50 use attribute (only useful in Z39.50 servers).
@@ -412,7 +447,7 @@ public class FieldData : FieldDData
   /// <summary>
   /// Who assigns the numbers?
   /// </summary>
-  public AutoNumberAssignmentSourceEnum AutoNumberAssignmentSource
+  public AutoNumberingAllowManualAssignmentEnum AutoNumberAssignmentSource
   {
     get;
     set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
@@ -446,9 +481,18 @@ public class FieldData : FieldDData
   }
 
   /// <summary>
-  /// The format string of this field.
+  /// The format string of this field. Use FormatString of LinkedField if possible.
   /// </summary>
   public string FormatString
+  {
+    get => LinkedFieldData?.FormatString ?? LocalFormatString;
+    set => LocalFormatString = value;
+  }
+
+  /// <summary>
+  /// FormatString on disk. Not public accessible, do not use this for anything else.
+  /// </summary>
+  private string LocalFormatString
   {
     get;
     set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
@@ -490,21 +534,39 @@ public class FieldData : FieldDData
   }
 
   /// <summary>
-  /// Retrieval path.
+  /// Retrieval path. Use RetrievalPath of LinkedField if possible.
   /// </summary>
   public string RetrievalPath
   {
+    get => LinkedFieldData?.LocalRetrievalPath ?? LocalRetrievalPath;
+    set => LocalRetrievalPath = value;
+  }
+
+  /// <summary>
+  /// RetrievalPath on disk. Not public accessible, do not use this for anything else.
+  /// </summary>
+  private string LocalRetrievalPath
+  {
     get;
-    set;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   } = string.Empty;
 
   /// <summary>
-  /// Thumbnail retrieval path.
+  /// Thumbnail retrieval path. Use ThumbnailRetrievalPath of LinkedField if possible.
   /// </summary>
   public string ThumbnailRetrievalPath
   {
+    get => LinkedFieldData?.LocalThumbnailRetrievalPath ?? LocalThumbnailRetrievalPath;
+    set => LocalThumbnailRetrievalPath = value;
+  }
+
+  /// <summary>
+  /// ThumbnailRetrievalPath on disk. Not public accessible, do not use this for anything else.
+  /// </summary>
+  private string LocalThumbnailRetrievalPath
+  {
     get;
-    set;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   } = string.Empty;
 
   /// <summary>
@@ -571,21 +633,39 @@ public class FieldData : FieldDData
   } = string.Empty;
 
   /// <summary>
-  /// Media storage type.
+  /// Media storage type. Use MediaStorageType of LinkedField if possible.
   /// </summary>
   public MediaStorageTypeEnum MediaStorageType
   {
-    get;
-    set;
+    get => LinkedFieldData?.LocalMediaStorageType ?? LocalMediaStorageType;
+    set => LocalMediaStorageType = value;
   }
 
   /// <summary>
-  /// Media storage type.
+  /// Media storage type on disk. Not public accessible, do not use this for anything else.
+  /// </summary>
+  private MediaStorageTypeEnum LocalMediaStorageType
+  {
+    get;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
+  }
+
+  /// <summary>
+  /// Media retrieval type. Use MediaRetrievalType of LinkedField if possible.
   /// </summary>
   public MediaRetrievalTypeEnum MediaRetrievalType
   {
+    get => LinkedFieldData?.LocalMediaRetrievalType ?? LocalMediaRetrievalType;
+    set => LocalMediaRetrievalType = value;
+  }
+
+  /// <summary>
+  /// Media retrieval type on disk. Not public accessible, do not use this for anything else.
+  /// </summary>
+  private MediaRetrievalTypeEnum LocalMediaRetrievalType
+  {
     get;
-    set;
+    set => (field, ElementCount) = (value, MaxElementCount(PropertyName(value)));
   }
 
   /// <summary>
@@ -844,7 +924,7 @@ public class FieldData : FieldDData
   /// <summary>
   /// A list with defaults
   /// </summary>
-  public List<LanguageTextData> Defaults
+  public TextsList Defaults
   {
     get;
     internal set;
@@ -853,7 +933,7 @@ public class FieldData : FieldDData
   /// <summary>
   /// A list with method texts
   /// </summary>
-  public List<LanguageTextData> MethodTexts
+  public TextsList MethodTexts
   {
     get;
     internal set;
@@ -862,7 +942,7 @@ public class FieldData : FieldDData
   /// <summary>
   /// A list labels
   /// </summary>
-  public List<LanguageTextData> LabelTexts
+  public TextsList LabelTexts
   {
     get;
     internal set;
@@ -871,7 +951,7 @@ public class FieldData : FieldDData
   /// <summary>
   /// A list of relation texts
   /// </summary>
-  public List<LanguageTextData> RelationTexts
+  public TextsList RelationTexts
   {
     get;
     internal set;
@@ -880,7 +960,7 @@ public class FieldData : FieldDData
   /// <summary>
   /// A list of reverse relation texts
   /// </summary>
-  public List<LanguageTextData> ReverseRelationTexts
+  public TextsList ReverseRelationTexts
   {
     get;
     internal set;
@@ -889,7 +969,7 @@ public class FieldData : FieldDData
   /// <summary>
   /// A list of record type roles
   /// </summary>
-  public List<AccessRightsData> RecordTypeRoles
+  public AccessControlList RecordTypeRoles
   {
     get;
     internal set;
@@ -898,7 +978,7 @@ public class FieldData : FieldDData
   /// <summary>
   /// The access rights for this field.
   /// </summary>
-  public List<AccessRightsData> AccessRights
+  public AccessControlList AccessRights
   {
     get;
     internal set;
@@ -952,7 +1032,7 @@ public class FieldData : FieldDData
   /// <summary>
   /// A list of language tags (obsolete since we have multi-lingual fields)
   /// </summary>
-  internal List<LanguageTextData> LanguageTags
+  internal TextsList LanguageTags
   {
     get;
     set;
@@ -966,6 +1046,9 @@ public class FieldData : FieldDData
     get; private set;
   } = [];
 
+  /// <summary>
+  /// A list of metadata mappings.
+  /// </summary>
   public List<MetadataMappingData> MetadataMappings
   {
     get; private set;
@@ -975,6 +1058,13 @@ public class FieldData : FieldDData
 
   internal void Add(LanguageTextData languageTextData) => Names.Add(languageTextData);
 
+  /// <summary>
+  /// Give the translation of an enumerated value, given the language
+  /// </summary>
+  /// <param name="value"></param>
+  /// <param name="language"></param>
+  /// <returns></returns>
+  /// <exception cref="LanguageIsNotSupportedException"></exception>
   public string? TranslateEnum(string? value, string language)
   {
     var enumValue = EnumerationValues.FirstOrDefault(e => e.NeutralValue == value);
@@ -1031,6 +1121,13 @@ public class FieldData : FieldDData
     return enumValue != null ? language == "" ? enumValue.NeutralValue : enumValue.Texts[Languages.GetAdlibNo(language)].Text : value;
   }
 
+  /// <summary>
+  /// Return the enumeration value list for a specific value.
+  /// </summary>
+  /// <param name="value"></param>
+  /// <param name="language"></param>
+  /// <returns></returns>
+  /// <exception cref="EnumValueException"></exception>
   public EnumerationValueData GetEnumerationValues(string value, string language = "")
   {
     EnumerationValueData? result = null;
@@ -1049,6 +1146,11 @@ public class FieldData : FieldDData
     return result ?? throw new EnumValueException(Database.Name!, Name!, Tag!, language, value);
   }
 
+  /// <summary>
+  /// Get the domain tag fore this field.
+  /// </summary>
+  /// <returns></returns>
+  /// <exception cref="NullReferenceException"></exception>
   public string GetDomainTag()
   {
     var linkIndex = PreferredIndex ?? throw new NullReferenceException(nameof(PreferredIndex));
@@ -1066,14 +1168,24 @@ public class FieldData : FieldDData
        throw new NullReferenceException(nameof(PreferredIndex.TableName));
 
   private short MaxElementCount(string propertyName)
-     => Math.Max(Properties.GetElementCount(propertyName), ElementCount);
+     => Math.Max(Properties.GetElementCount(propertyName), ElementCount ?? 0);
 
+  /// <summary>
+  /// Get the source of a linked field
+  /// </summary>
+  /// <param name="linkedField"></param>
+  /// <returns></returns>
   public FieldData? LinkSourceField(FieldData linkedField)
   {
     var mergePair = MergeTags.FirstOrDefault(pair => pair.Destination == linkedField.Tag);
     return mergePair != null ? LinkedDatabase?.FindFieldByTagOrName(mergePair.Source!) : null;
   }
 
+  /// <summary>
+  /// Get the parts field for the current field
+  /// </summary>
+  /// <returns></returns>
+  /// <exception cref="DDException"></exception>
   public FieldData GetPartsField()
   {
     var relation = Database.InternalLinks.Where(il => il.RelationType == RelationTypeEnum.Hierarchical);
@@ -1085,6 +1197,11 @@ public class FieldData : FieldDData
     return Database.FindFieldByTagOrName(partsTag) ?? throw new DDException($"Field {partsTag} not found in internal links");
   }
 
+  /// <summary>
+  /// Get the parts of field for the current field
+  /// </summary>
+  /// <returns></returns>
+  /// <exception cref="DDException"></exception>
   public FieldData GetPartsOfField()
   {
     var relation = Database.InternalLinks.Where(il => il.RelationType == RelationTypeEnum.Hierarchical);
@@ -1096,20 +1213,46 @@ public class FieldData : FieldDData
     return Database.FindFieldByTagOrName(partsOfTag) ?? throw new DDException($"Field {partsOfTag} not found in internal links");
   }
 
+  /// <summary>
+  /// Get the root field for an indirected field.
+  /// </summary>
+  /// <param name="fieldNameOrTag"></param>
+  /// <returns></returns>
   public static (string root, string? remainder) GetRoot(string fieldNameOrTag)
   {
     var index = fieldNameOrTag.IndexOf(IndirectionOperator);
     return index < 0 ? (fieldNameOrTag, null) : (fieldNameOrTag[..index].Trim(), fieldNameOrTag[(index + 2)..].Trim());
   }
 
+  /// <summary>
+  /// Constant to define indirection.
+  /// </summary>
   public const string IndirectionOperator = "->";
 
+  /// <summary>
+  /// Name of the identifier field.
+  /// </summary>
   public const string Identifier = "identifier";
 
-  public static bool IsIdentifier(string fieldNameOrTag) => (fieldNameOrTag == Identifier || fieldNameOrTag == "id" || 
+  /// <summary>
+  /// Is this the primary index?
+  /// </summary>
+  /// <param name="fieldNameOrTag"></param>
+  /// <returns></returns>
+  public static bool IsIdentifier(string fieldNameOrTag) => (fieldNameOrTag == Identifier || /* fieldNameOrTag == "id" || */
                                                              fieldNameOrTag == "priref" || fieldNameOrTag == "%0");
 
-  internal static PropertyList Properties =
+  /// <summary>
+  /// Is this the identifier field?
+  /// </summary>
+  [JsonIgnore]
+
+  public bool IsId => Tag == "%0";
+
+  [JsonIgnore]
+  static IReadOnlyList<PropertyMap> IHasPropertyMap<FieldData>.Properties => Properties;
+
+  internal static readonly PropertyList Properties = 
     [
       new PropertyMap(0, DataTypesEnum.Int16, "ElementCount"),
       new PropertyMap(1, DataTypesEnum.String, "LinkedDatabasePath"),
@@ -1135,7 +1278,7 @@ public class FieldData : FieldDData
       new PropertyMap(24, DataTypesEnum.String, "SearchScreen"),
       new PropertyMap(25, DataTypesEnum.String, "LinkReverseTag"),
       new PropertyMap(28, DataTypesEnum.String, "BroaderTag"),
-      new PropertyMap(29, DataTypesEnum.Bool, "Enumeration"),
+      new PropertyMap(29, DataTypesEnum.Bool, "IsEnumeration"),
       new PropertyMap(31, DataTypesEnum.String, "LinkDomain"),
       new PropertyMap(32, DataTypesEnum.Int16, "Z3950UseAttribute"),
       new PropertyMap(33, DataTypesEnum.String, "Z3950Grs1TagPath"),
@@ -1154,20 +1297,20 @@ public class FieldData : FieldDData
       new PropertyMap(56, DataTypesEnum.String, "AutoNumberSuffix"),
       new PropertyMap(57, DataTypesEnum.String, "AutoNumberFormatString"),
       new PropertyMap(58, DataTypesEnum.Enum, "AutoNumberAssignment", typeof(AutoNumberAssignmentEnum)),
-      new PropertyMap(59, DataTypesEnum.Enum, "AutoNumberAssignmentSource", typeof(AutoNumberAssignmentSourceEnum)),
+      new PropertyMap(59, DataTypesEnum.Enum, "AutoNumberAssignmentSource", typeof(AutoNumberingAllowManualAssignmentEnum)),
       new PropertyMap(60, DataTypesEnum.BoolI, "IsRepeated"),
       new PropertyMap(61, DataTypesEnum.Enum, "IsExchangeable", typeof(ExchangeableEnum)),
       new PropertyMap(62, DataTypesEnum.Enum, "SortOrder", typeof(SortOrderEnum)),
       new PropertyMap(63, DataTypesEnum.Enum, "EnumerationSortOrder", typeof(EnumerationSortOrderEnum)),
       new PropertyMap(64, DataTypesEnum.Int32, "AutoNumberStartValue"),
       new PropertyMap(65, DataTypesEnum.Int32, "AutoNumberIncrement"),
-      new PropertyMap(67, DataTypesEnum.String, "FormatString"),
+      new PropertyMap(67, DataTypesEnum.String, nameof(LocalFormatString)),
       new PropertyMap(68, DataTypesEnum.Enum, "StorageType", typeof(StorageTypeEnum)),
       new PropertyMap(69, DataTypesEnum.Bool, "IsMultiLingual"),
       new PropertyMap(70, DataTypesEnum.Bool, "DoNotShowInLists"),
       new PropertyMap(71, DataTypesEnum.Int32, "PresentationFormat"),
-      new PropertyMap(72, DataTypesEnum.String, "RetrievalPath"),
-      new PropertyMap(73, DataTypesEnum.String, "ThumbnailRetrievalPath"),
+      new PropertyMap(72, DataTypesEnum.String, nameof(LocalRetrievalPath)),
+      new PropertyMap(73, DataTypesEnum.String, nameof(LocalThumbnailRetrievalPath)),
       new PropertyMap(74, DataTypesEnum.String, "RangeStartTag"),
       new PropertyMap(75, DataTypesEnum.String, "RangeEndTag"),
       new PropertyMap(76, DataTypesEnum.Bool, "ExcludeFromFullTextIndex"),
@@ -1175,8 +1318,8 @@ public class FieldData : FieldDData
       new PropertyMap(79, DataTypesEnum.Bool, "DoNotUseLinkScreen"),
       new PropertyMap(80, DataTypesEnum.String, "InPointTag"),
       new PropertyMap(81, DataTypesEnum.String, "OutPointTag"),
-      new PropertyMap(82, DataTypesEnum.Enum, "MediaStorageType", typeof(MediaStorageTypeEnum)),
-      new PropertyMap(83, DataTypesEnum.Enum, "MediaRetrievalType", typeof(MediaRetrievalTypeEnum)),
+      new PropertyMap(82, DataTypesEnum.Enum, nameof(LocalMediaStorageType), typeof(MediaStorageTypeEnum)),
+      new PropertyMap(83, DataTypesEnum.Enum, nameof(LocalMediaRetrievalType), typeof(MediaRetrievalTypeEnum)),
       new PropertyMap(84, DataTypesEnum.String, "DetailScreen"),
       new PropertyMap(85, DataTypesEnum.String, "RelatedTag"),
       new PropertyMap(86, DataTypesEnum.Bool, "IsInheritable"),
@@ -1206,29 +1349,35 @@ public class FieldData : FieldDData
       new PropertyMap(115, DataTypesEnum.String, "DefaultLinkFilter")
     ];
 
-  internal override (PropertyList, IEnumerable<object>)[] Children =>
+  internal override ChildrenList[] Children =>
   [
-      (MergeTagData.Properties, MergeTags),
-      (MergeTagData.Properties, WriteBackTags),
-      (LanguageTextData.Properties, Names),
-      (AccessRightsData.Properties, AccessRights),
-      (EnumerationValueData.Properties, EnumerationValues),
-      (LanguageTextData.Properties, Defaults),
-      (MergeTagData.Properties, MergeListTags),
-      (LanguageTextData.Properties, MethodTexts),
-      (LanguageTextData.Properties, LabelTexts),
-      (LanguageTextData.Properties, LanguageTags),
-      (ExternalSourceData.Properties, ExternalSources),
-      (AccessRightsData.Properties, RecordTypeRoles),
-      (LanguageTextData.Properties, RelationTexts),
-      (LanguageTextData.Properties, ReverseRelationTexts),
-      (MergeTagData.Properties, MetadataMergeTags),
-      (MetadataMappingData.Properties, MetadataMappings),
+      new ChildrenList(MergeTags, MergeTagData.Properties),
+      new ChildrenList(WriteBackTags, MergeTagData.Properties),
+      new ChildrenList(Names, LanguageTextData.Properties),
+      new ChildrenList(AccessRights, AccessRightsData.Properties),
+      new ChildrenList(EnumerationValues, EnumerationValueData.Properties),
+      new ChildrenList(Defaults, LanguageTextData.Properties),
+      new ChildrenList(MergeListTags, MergeTagData.Properties),
+      new ChildrenList(MethodTexts, LanguageTextData.Properties),
+      new ChildrenList(LabelTexts, LanguageTextData.Properties),
+      new ChildrenList(LanguageTags, LanguageTextData.Properties),
+      new ChildrenList(ExternalSources, ExternalSourceData.Properties),
+      new ChildrenList(RecordTypeRoles, AccessRightsData.Properties),
+      new ChildrenList(RelationTexts, LanguageTextData.Properties),
+      new ChildrenList(ReverseRelationTexts, LanguageTextData.Properties),
+      new ChildrenList(MetadataMergeTags, MergeTagData.Properties),
+      new ChildrenList(MetadataMappings, MetadataMappingData.Properties),
   ];
 
+  /// <summary>
+  /// Is this a linked field?
+  /// </summary>
   public bool IsLinked => !string.IsNullOrWhiteSpace(LinkIndexTag) && !string.IsNullOrWhiteSpace(LinkedDatabasePath);
 
   private bool? isLinkIdField;
+  /// <summary>
+  /// Is this a link id field?
+  /// </summary>
   [JsonIgnore]
   public bool IsLinkIdField
   {
@@ -1247,8 +1396,11 @@ public class FieldData : FieldDData
     }
   }
 
-  [JsonIgnore]
   private FieldData? linkedField;
+  /// <summary>
+  /// Find the linked field
+  /// </summary>
+  [JsonIgnore]
   public FieldData? LinkedField
   {
     get
@@ -1256,13 +1408,16 @@ public class FieldData : FieldDData
       if (!isLinkIdField.HasValue)
       {
         linkedField = Database?.FindFieldByLinkIdTag(Tag!);
-        isLinkIdField = linkedField != null;
+        isLinkIdField = linkedField is not null;
       }
       return linkedField;
     }
   }
 
   private bool? isMergedField;
+  /// <summary>
+  /// Indicates whether this field is a merged field
+  /// </summary>
   [JsonIgnore]
   public bool IsMergedField
   {
@@ -1281,6 +1436,9 @@ public class FieldData : FieldDData
   }
 
   private bool? isWriteBackField;
+  /// <summary>
+  /// Indicates whether this field is a write back field
+  /// </summary>
   [JsonIgnore]
   public bool IsWriteBackField
   {
@@ -1323,72 +1481,84 @@ public class FieldData : FieldDData
     }
   }
 
+  /// <summary>
+  /// Is this field read-only?
+  /// This is true for context fields, linkId fields or merged fields that are not written back, if not a linked field 
+  /// </summary>
   [JsonIgnore]
-  public bool IsReadOnly => IsContextField;
+  public bool? IsReadOnly => IsContextField || IsLinkIdField || (!IsLinked && IsMergedField && !IsWriteBackField);
 
+  /// <summary>
+  /// This this an automatic numbering field?
+  /// </summary>
   [JsonIgnore]
   public bool IsAutoNumberField => AutoNumberAssignment != AutoNumberAssignmentEnum.Undefined &&
                                    AutoNumberAssignment != AutoNumberAssignmentEnum.Never &&
                                    (AutoNumberIncrement > 0 || AutoNumber16Increment > 0);
 
-  private DatabaseData? linkedDatabase = null;
+  /// <summary>
+  /// Return the linked database metadata, null if not linked
+  /// </summary>
   [JsonIgnore]
   public DatabaseData? LinkedDatabase
   {
     get
     {
-      if (IsLinked && LinkedDatabasePath != null && linkedDatabase == null)
+      if (IsLinked && LinkedDatabasePath is not null && field is null)
       {
         if (LinkedDatabasePath == "=")
         {
-          linkedDatabase = Database;
+          field = Database;
         }
         else
         {
-          if (LinkedDatabasePhysicalPath == null)
+          if (LinkedDatabasePhysicalPath is null)
           {
             throw new NullReferenceException(LinkedDatabasePhysicalPath);
           }
-          linkedDatabase = MetaDataCache.ReadDatabase(LinkedDatabasePhysicalPath, false);
+          field = MetaDataCache.ReadDatabase(LinkedDatabasePhysicalPath, false);
         }
       }
-      return linkedDatabase;
+      return field;
     }
   }
 
-  private FieldData? linkedFieldData = null;
+  /// <summary>
+  /// Get the field metadata for the linked field
+  /// </summary>
   [JsonIgnore]
   public FieldData? LinkedFieldData
   {
     get
     {
-      if (linkedFieldData == null && LinkIndexTag != null && LinkedDatabase != null)
+      if (field is null && LinkIndexTag is not null && LinkedDatabase is not null)
       {
-        linkedFieldData = LinkedDatabase.FindFieldByTagOrName(LinkIndexTag);
+        field = LinkedDatabase.FindFieldByTagOrName(LinkIndexTag);
       }
       // this could be a merged field, find the linked field.
-      linkedFieldData ??= Database?.FindFieldByMergeTag(Tag!);
-      return linkedFieldData;
+      field ??= Database?.FindFieldByMergeTag(Tag!);
+      return field;
     }
   }
 
-  private List<IndexData>? indexList = null;
+  /// <summary>
+  /// The list of indexes for this field
+  /// </summary>
   [JsonIgnore]
   public List<IndexData>? IndexList
   {
     get
     {
-      if (indexList == null && Database != null)
+      if (field is null && Database is not null)
       {
-        indexList = [];
+        field = [];
         var tag = IsLinked ? LinkIdTag : Tag;
-        indexList.AddRange(Database.Indexes.Where(index => index.IndexTags.Contains(tag!)));
+        field.AddRange(Database.Indexes.Where(index => index.IndexTags.Contains(tag!)));
       }
-      return indexList;
+      return field;
     }
   }
 
-  IndexData? preferredIndex;
   /// <summary>
   /// Returns the (first) preferred  index for this field
   /// </summary>
@@ -1397,49 +1567,53 @@ public class FieldData : FieldDData
   {
     get
     {
-      if (preferredIndex == null && IndexList != null)
+      if (field is null && IndexList is not null)
       {
         foreach (var indexData in IndexList)
         {
           var indexTag = indexData.Tag;
           if (indexTag == Tag || (!string.IsNullOrEmpty(LinkIdTag) && LinkIdTag == indexTag))
           {
-            preferredIndex = indexData;
+            field = indexData;
             break;
           }
         }
       }
-      return preferredIndex;
+      return field;
     }
   }
 
-  private string? linkedDataset = null;
+  /// <summary>
+  /// The name of the linked dataset.
+  /// </summary>
   [JsonIgnore]
   public string? LinkedDataset
   {
     get
     {
-      if (!string.IsNullOrWhiteSpace(LinkedDatabasePath) && linkedDataset == null)
+      if (!string.IsNullOrWhiteSpace(LinkedDatabasePath) && field is null)
       {
         var pos = LinkedDatabasePath.IndexOf('>');
         if (pos > 0)
         {
-          linkedDataset = LinkedDatabasePath[(pos + 1)..];
+          field = LinkedDatabasePath[(pos + 1)..];
         }
       }
-      return linkedDataset;
+      return field;
     }
   }
 
-  private string? linkedDatabasePhysicalPath;
+  /// <summary>
+  /// The file path to the linked database's metadata
+  /// </summary>
   [JsonIgnore]
   public string? LinkedDatabasePhysicalPath
   {
     get
     {
-      if (linkedDatabasePhysicalPath == null)
+      if (field is null)
       {
-        if (LinkedDatabasePath != null)
+        if (LinkedDatabasePath is not null)
         {
           var pos = LinkedDatabasePath.IndexOf('>');
           var path = (pos > 0 ? LinkedDatabasePath[..pos] : LinkedDatabasePath).Replace('+', Path.DirectorySeparatorChar);
@@ -1447,27 +1621,29 @@ public class FieldData : FieldDData
           {
             path += ".inf";
           }
-          linkedDatabasePhysicalPath = new FileInfo(Path.Combine(Path.GetDirectoryName(Database!.PhysicalPath)!, path)).FullName;
+          field = new FileInfo(Path.Combine(Path.GetDirectoryName(database!.FileName)!, path)).FullName;
         }
       }
-      return linkedDatabasePhysicalPath;
+      return field;
     }
   }
 
-  private string? dataTag;
+  /// <summary>
+  /// The data tag for the field.
+  /// </summary>
   [JsonIgnore]
   public string? DataTag
   {
     get
     {
-      if (dataTag == null)
+      if (field == null)
       {
-        dataTag = Tag!;
+        field = Tag!;
         if (IsLinked)
         {
           if (!string.IsNullOrWhiteSpace(LinkIdTag))
           {
-            dataTag = LinkIdTag;
+            field = LinkIdTag;
           }
         }
         else if (IsMergedField)
@@ -1477,27 +1653,27 @@ public class FieldData : FieldDData
           {
             throw new NullReferenceException(nameof(fieldData));
           }
-          dataTag = fieldData.LinkIdTag;
+          field = fieldData.LinkIdTag;
 
-          if (dataTag == null)
+          if (field == null)
           {
             throw new NullReferenceException(nameof(fieldData.LinkIdTag));
           }
         }
       }
-      return dataTag;
+      return field;
     }
   }
 
-  private FieldData? useFieldData;
-
-
+  /// <summary>
+  /// The field metadata for a preferred field
+  /// </summary>
   [JsonIgnore]
   public FieldData? UseFieldData
   {
     get
     {
-      if (useFieldData == null)
+      if (field == null)
       {
         if (!string.IsNullOrWhiteSpace(PreferredTag))
         {
@@ -1506,15 +1682,14 @@ public class FieldData : FieldDData
             var linkedFieldData = LinkedDatabase.FindFieldByTagOrName(PreferredTag);
             if (linkedFieldData != null)
             {
-              useFieldData = linkedFieldData;
+              field = linkedFieldData;
             }
           }
         }
       }
-      return useFieldData;
+      return field;
     }
   }
-
 
   /// <summary>
   /// Returns the physical tag that is associated with a field 
@@ -1522,55 +1697,30 @@ public class FieldData : FieldDData
   ///  or the real Tag), added support for context fields on 22/03/2025 BDD
   /// </summary>
   [JsonIgnore]
-  public string? PhysicalTag
-  {
-    get
+  public string? PhysicalTag =>
+    this switch
     {
-      if (IsLinked)
-      {
-        return LinkIdTag;
-      }
-      if (IsMergedField && LinkedFieldData != null && LinkedFieldData.LinkIdTag != null)
-      {
-        return LinkedFieldData.LinkIdTag;
-      }
-      if (IsContextField && ParentField != null)
-      {
-        return ParentField.LinkIdTag;
-      }
-      return Tag;
-    }
-  }
+      { IsLinked: true } => LinkIdTag,
+
+      // IsMergedField && LinkedFieldData != null && LinkedFieldData.LinkIdTag != null
+      { IsMergedField: true, LinkedFieldData.LinkIdTag: var linkIdTag and not null } => linkIdTag,
+
+      // IsContextField && ParentField != null
+      { IsContextField: true, ParentField: var parent and not null } => parent.LinkIdTag,
+
+      _ => Tag
+    };
 
 
-  private bool? isLinkRef;
-  [JsonIgnore]
-  public bool IsLinkRef
-  {
-    get
-    {
-      isLinkRef ??= Database != null && !string.IsNullOrWhiteSpace(Tag) && Database.FindFieldByLinkIdTag(Tag) != null;
-      return isLinkRef.Value;
-    }
-  }
-
+  /// <summary>
+  /// Get the occurrence type for this field.
+  /// </summary>
   public OccurrenceDataTypeEnum OccurrenceDataType
-  {
-    get
-    {
-      if (Enumeration)
+      => this switch
       {
-        return OccurrenceDataTypeEnum.Enumeration;
-      }
-      if (IsLinkIdField)
-      {
-        return OccurrenceDataTypeEnum.LinkRef;
-      }
-      if (IsMultiLingual)
-      {
-        return OccurrenceDataTypeEnum.Multilingual;
-      }
-      return OccurrenceDataTypeEnum.Standard;
-    }
-  }
+        { IsEnumeration: true } => OccurrenceDataTypeEnum.Enumeration,
+        { IsLinkIdField: true } => OccurrenceDataTypeEnum.LinkRef,
+        { IsMultiLingual: true } => OccurrenceDataTypeEnum.Multilingual,
+        _ => OccurrenceDataTypeEnum.Standard
+      };
 }

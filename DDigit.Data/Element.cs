@@ -1,4 +1,7 @@
 ﻿
+
+using System.Xml.Linq;
+
 namespace DDigit.Data;
 
 public class Element
@@ -14,6 +17,11 @@ public class Element
   internal ConcurrentStack<object?> Values
   {
     get; 
+  } = [];
+
+  internal ConcurrentStack<object?> ReDoValues
+  {
+    get;
   } = [];
 
   public bool Invariant
@@ -49,4 +57,20 @@ public class Element
   }
 
   internal Element Clone() => new(Value, Language, Invariant);
+
+  internal void Undo()
+  {
+    if (Values.Count > 1 && Values.TryPop(out var top))
+    {
+      ReDoValues.Push(top);
+    }
+  }
+
+  internal void Redo()
+  {
+    if (!ReDoValues.IsEmpty && ReDoValues.TryPop(out var top))
+    {
+      Values.Push(top);
+    }
+  }
 }

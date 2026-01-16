@@ -54,7 +54,7 @@ public class IndexChanges : List<IndexRow>
 
   private IndexRow SelectRow(IndexRow row, IndexRow? existing)
   {
-    if (existing == null)
+    if (existing is null)
     {
       Add(row);
     }

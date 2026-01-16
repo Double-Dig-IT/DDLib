@@ -1,6 +1,4 @@
-﻿using DDigit.Search;
-
-namespace DDigit.Scripting;
+﻿namespace DDigit.Scripting;
 
 /// <summary>
 /// base class for all double digit cmdlets

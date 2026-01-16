@@ -1,12 +1,26 @@
 ﻿namespace DDigit.MetaData;
 
+/// <summary>
+/// Metadata about access rights;
+/// </summary>
 public class AccessRightsData : BaseData
 {
-  public AccessRightsData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace)
-    : base(objectType, stream, encoding, fileName, Properties, trace)
+  /// <summary>
+  /// Construtor while reading
+  /// </summary>
+  /// <param name="objectType"></param>
+  /// <param name="stream"></param>
+  /// <param name="encoding"></param>
+  /// <param name="trace"></param>
+  public AccessRightsData(ObjectTypeEnum objectType, FileStream? stream, Encoding encoding, bool trace)
+    : base(objectType, stream, encoding, Properties, trace)
   {
   }
 
+  /// <summary>
+  /// General constructor
+  /// </summary>
+  /// <param name="objectType"></param>
   public AccessRightsData(ObjectTypeEnum objectType) : base(objectType, Properties)
   {
   }
@@ -27,6 +41,10 @@ public class AccessRightsData : BaseData
     get; set;
   }
 
+  /// <summary>
+  /// Override for debugging.
+  /// </summary>
+  /// <returns></returns>
   public override string ToString() => $"{Role}:{Rights}";
 
   internal static PropertyList Properties =

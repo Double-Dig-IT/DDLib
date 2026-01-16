@@ -4,7 +4,18 @@ public static class KeyConversions
 {
   private static readonly DateTime beginDate = new(1900, 1, 1);
 
-  public static int DateTimeStringToInt(string? value) => value != null ? (DateTime.Parse(value) - beginDate).Days + 1 : -1;
+  public static int DateTimeStringToInt(string? value)
+  {
+    // return -1 if we do not have a date
+    if (value is null)
+    {
+      return -1;
+    }
+
+    // return number of days since the first of january 1900
+    var date = int.TryParse(value, out var year) ? new DateTime(year, 1, 1) : DateTime.Parse(value);
+    return (date - beginDate).Days + 1;
+  }
 
   public static string DisplayTermValue(object? value, int length)
   {
@@ -72,7 +83,7 @@ public static class KeyConversions
     => (text.Length > 0 && (text[0] >= '0' && text[0] <= '9') &&
         text.Length < length) ?
       new string('0', length - text.Length) + text : text;
- 
+
   public static string AlphaKeyValue(string value, int length)
   {
     var key = new StringBuilder();
@@ -84,5 +95,6 @@ public static class KeyConversions
 
   public static string TermValue(object? value, int length) => DisplayTermValue(value, length).ToLower();
 
-  public static decimal IsoDateToDecimal(object value, DateCompletionEnum dateCompletion) => new IsoDate((string?)value, dateCompletion).ToDecimal();
+  public static decimal IsoDateToDecimal(object value, DateCompletionEnum dateCompletion) 
+    => new IsoDate((string?)value, dateCompletion).ToDecimal();
 }

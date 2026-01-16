@@ -11,10 +11,15 @@ public partial class DDataProvider : IDataProvider
     var searchTree = new SearchTree
     {
       Database = databaseData,
-      Cancellation = cancellationToken,
+      SqlState = new SqlStateInfo
+      {
+        Connection = null,
+        Transaction = null,
+        CancellationToken = cancellationToken
+      }
     };
     var result = await Repository.GetResultSetAsync(searchTree, set);
-    result.WorkingDirectory = Path.GetDirectoryName(databaseData.PhysicalPath);
+    result.WorkingDirectory = Path.GetDirectoryName(databaseData.FileName);
     return result;
   }
 }

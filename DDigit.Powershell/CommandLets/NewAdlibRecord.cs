@@ -39,7 +39,7 @@ public class NewAdlibRecord : DDCmdlet
 
   public Record New()
   {
-    if (Database == null)
+    if (Database is null)
     {
       throw new ArgumentNullException(nameof(Database));
     }

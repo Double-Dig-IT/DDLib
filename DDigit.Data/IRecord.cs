@@ -8,5 +8,5 @@ public interface IRecord
 
   public Task DeleteAsync(CancellationToken cancellationToken);
 
-  public Task WriteAsync(IDbConnection? connection, IDbTransaction? transaction, CancellationToken cancellationToken);
+  public Task WriteAsync(SqlStateInfo? sqlState, RecordWriteOptionsFlag? writeOptions);
 }

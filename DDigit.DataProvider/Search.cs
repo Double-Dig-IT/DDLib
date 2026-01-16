@@ -11,6 +11,7 @@ public partial class DDataProvider : IDataProvider
     return parser.Parse(databaseData, statement, default);
   }
 
+
   /// <summary>
   /// Run a search statement
   /// </summary>
@@ -18,66 +19,58 @@ public partial class DDataProvider : IDataProvider
   /// <param name="database">The database to query</param>
   /// <param name="statement">The statement to executer</param>
   /// <param name="previousResults">Previous results (from a PowerShell pipeline)</param>
-  /// <returns></returns>
+  /// <returns>search result</returns>
   public async Task<ResultSet?> SearchAsync(string folder,
                                             string database,
                                             IEnumerable<string>? datasets, string statement,
-                                            ResultSet? previousResults = null, 
-                                            int milestone = 0, 
+                                            ResultSet? previousResults = null,
+                                            int milestone = 0,
+                                            CancellationToken cancellationToken = default)
+  {
+    var databaseData = MetaDataCache.ReadDatabase(folder, database, false);
+    if (databaseData is null)
+    {
+      return null;
+    }
+    return await SearchAsync(databaseData, datasets, statement, previousResults, milestone, cancellationToken);
+  }
+
+  /// <summary>
+  /// Run a search statement
+  /// </summary>
+  /// <param name="databaseData">The databaseData to search in</param>
+  /// <param name="statement">The statement to executer</param>
+  /// <param name="previousResults">Previous results (from a PowerShell pipeline)</param>
+  /// <returns></returns>
+  public async Task<ResultSet?> SearchAsync(DatabaseData databaseData,
+                                            IEnumerable<string>? datasets, string statement,
+                                            ResultSet? previousResults = null,
+                                            int milestone = 0,
                                             CancellationToken cancellationToken = default)
   {
     try
     {
-      var databaseData = MetaDataCache.ReadDatabase(folder, database, false);
-      if (databaseData == null)
-      {
-        return null;
-      }
-   
-      var datasetFilter = datasets != null ? new DatasetFilter(databaseData, datasets) : null;
+      var datasetFilter = datasets is not null ? new DatasetFilter(databaseData, datasets) : null;
       var searchTree = parser.Parse(databaseData, statement, cancellationToken);
       searchTree.DatasetFilter = datasetFilter;
       searchTree.PreviousResults = previousResults;
-      searchTree.Cancellation = cancellationToken;
+      searchTree.SqlState.CancellationToken = cancellationToken;
       searchTree.Milestone = milestone;
 
-      return searchTree != null ?
-        (await SearchAsync(searchTree, searchTree.Root!)).Randomize(searchTree).Limit(searchTree) : null;
+      return searchTree is not null ?
+        (await SearchWithSortAsync(searchTree, searchTree.Root!)) : null;
     }
-    catch (TaskCanceledException)
+    catch (Exception ex) when (ex is TaskCanceledException || ex is OperationCanceledException)
     {
       throw;
     }
+    catch (SqlException ex) when (ex.Number == -2 || ex.Number == 0 && cancellationToken.IsCancellationRequested)
+    {
+      throw new TaskCanceledException();
+    }
     catch (Exception ex)
     {
-      throw new SearchException(folder, database, statement, ex);
+      throw new SearchException(databaseData.Folder!, databaseData.Name!, statement, ex);
     }
-  }
-
-
-  private async Task<ResultSet> SearchAsync(SearchTree searchTree, SearchNode searchNode)
-  {
-    // This is a simple search.
-    if (searchNode is SearchTreeLeaf leaf)
-    {
-      return await FindRecordSetAsync(searchTree, leaf);
-    }
-
-    // This is a Boolean search with 2 nodes that need to be combined
-    if (searchNode is SearchTreeNode searchTreeNode)
-    {
-      var left = await SearchAsync(searchTree, searchTreeNode.Left);
-      var right = await SearchAsync(searchTree, searchTreeNode.Right);
-      return JoinRecordSet(left, searchTreeNode.Operator, right);
-    }
-
-    // We are dealing with a set here.
-    if (searchNode is SearchSetLeaf searchSetLeaf)
-    {
-      return await Repository.GetResultSetAsync(searchTree, searchSetLeaf.SetId);
-    }
-
-    // This should never happen
-    throw new DDException($"Unexpected search node: {searchNode}");
   }
 }

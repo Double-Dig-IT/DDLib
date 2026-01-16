@@ -1,7 +1,7 @@
 ﻿namespace DDigit.MetaData;
 
-public class FieldConditionData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace) :
-  BaseData(objectType, stream, encoding, fileName, Properties, trace)
+public class FieldConditionData(ObjectTypeEnum objectType, FileStream stream, Encoding encoding, bool trace) :
+  BaseData(objectType, stream, encoding, Properties, trace)
 {
   public ConditionEnum Condition { get; private set; }
 

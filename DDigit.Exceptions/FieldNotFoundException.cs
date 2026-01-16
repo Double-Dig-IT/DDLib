@@ -9,17 +9,19 @@ public class FieldNotFoundException : DDException
     Database = database;
   }
 
-  public FieldNotFoundException(string tag, int occ, string? database)
-    : base($"Field '{tag}' not found in '{database}'")
+  public FieldNotFoundException(string tag, int occ, string? database, int id)
+    : base($"Field '{tag}' not found for record '{id}' in '{database}'")
   {
+    Id = id;
     Tag = tag;
     Occ = occ;
     Database = database;
   }
 
-  public FieldNotFoundException(string tag, int occ, string language, string? database)
-    : base($"Field '{tag}' not found in '{database}'")
+  public FieldNotFoundException(string tag, int occ, string language, string? database, int id)
+    : base($"Field '{tag}' not found for record '{id}' in database '{database}'")
   {
+    Id = id;
     Tag = tag;
     Occ = occ;
     Language = language;
@@ -37,6 +39,11 @@ public class FieldNotFoundException : DDException
   }
 
   public string? Language
+  {
+    get;
+  }
+
+  public int Id
   {
     get;
   }

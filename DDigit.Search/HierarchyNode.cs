@@ -1,20 +1,22 @@
-﻿namespace DDigit.Search;
+﻿
+namespace DDigit.Search;
 
 public class HierarchyNode
 {
-  public required string Key { get; set; }
-  public int Id { get; set; }
-  public List<HierarchyNode> Children { get; set; } = [];
-  public override string ToString() => $"{Key} ({Id})";
-  public bool Match {  get; set; }
+    public required string Key { get; set; }
+    public int Id { get; set; }
+    public List<HierarchyNode> Children { get; set; } = [];
+    public override string ToString() => $"{Key} ({Id})";
 
-  public List<int> GetAllIds()
-  {
-    List<int> ids = Match ? [Id] : [];  
-    foreach (var child in Children)
+    public int? LastId
     {
-      ids.AddRange(child.GetAllIds());
+        get
+        {
+            if (Children.Count == 0)
+            {
+                return Id;
+            }
+            return Children.Last().LastId;
+        }
     }
-    return ids;
-  }
 }

@@ -28,12 +28,12 @@ public class UpdateLinksData : Dictionary<DatabaseData, List<FieldData>>
 
   private static IEnumerable<DatabaseData> GetDatabases(DatabaseData databaseData)
   {
-    if (databaseData.PhysicalPath == null)
+    if (databaseData.FileName == null)
     {
-      throw new NullReferenceException(nameof(databaseData.PhysicalPath));
+      throw new NullReferenceException(nameof(databaseData.FileName));
     }
     string folder;
-    folder = Path.GetDirectoryName(databaseData.PhysicalPath) ??
+    folder = Path.GetDirectoryName(databaseData.FileName) ??
       throw new NullReferenceException(nameof(folder));
     return MetaDataCache.FindDatabases(folder);
   }

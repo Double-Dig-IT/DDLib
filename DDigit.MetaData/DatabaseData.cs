@@ -1,7 +1,8 @@
-﻿using System.IO;
+﻿namespace DDigit.MetaData;
 
-namespace DDigit.MetaData;
-
+/// <summary>
+/// Metadata for a database
+/// </summary>
 public class DatabaseData : FileData
 {
   /// <summary>
@@ -12,53 +13,117 @@ public class DatabaseData : FileData
   public DatabaseData(string? fileName, bool trace = false) : base(ObjectTypeEnum.Database,
     AddExtension(fileName, ".inf"), trace)
   {
+    GetFieldCollections();
+  }
+
+  internal void GetFieldCollections()
+  {
     GetRecordMetaDataFields();
     GetLocationFields();
+    GetConditionFields();
     GetAutoNumberingFields();
+    GetDefaultValueFields();
     CreateFullTextField();
   }
 
-  internal void GetAutoNumberingFields() 
+  private void GetAutoNumberingFields()
     => AutomaticNumberingFields = Fields.Where(field => field.IsAutoNumberField);
-  
-  public void GetLocationFields()
+
+  private void GetDefaultValueFields()
+      => DefaultValueFields = Fields.Where(field => field.DefaultType is not
+                    (DefaultTypeEnum.None or DefaultTypeEnum.Undefined));
+
+  /// <summary>        
+  /// Figure out what the location fields are.
+  /// </summary>
+  private void GetLocationFields()
   {
+    HomeLocationFields = new LocationFieldData
+    {
+      Barcode = FindFieldByTagOrName("location.default.barcode"),
+      Context = FindFieldByTagOrName("location.default.context"),
+      Id = FindFieldByTagOrName("location.default.lref"),
+      Name = FindFieldByTagOrName("location.default.name"),
+      Type = FindFieldByTagOrName(["location.default.type",
+                                   "location.default.package_location"])
+    };
+
     LocationFields = new LocationFieldData
     {
       Authorizer = FindFieldByTagOrName("current_location.authoriser"),
       AuthorizerId = FindFieldByTagOrName("current_location.authoriser.lref"),
-      Barcode = FindFieldByTagOrName("current_location.barcode"),
-      Context = FindFieldByTagOrName("current_location.context"),
-      Executor = FindFieldByTagOrName("current_location.executor"),
-      Id = FindFieldByTagOrName("current_location.lref"),
-      Name = FindFieldByTagOrName("current_location.name"),
-      Notes = FindFieldByTagOrName("current_location.notes"),
-      StartDate = FindFieldByTagOrName("current_location.date"),
-      StartTime = FindFieldByTagOrName("current_location.time"),
+      Barcode = FindFieldByTagOrName(["current_location.barcode",
+                                      "current_location_package.barcode"]),
+      Context = FindFieldByTagOrName(["current_location.context",
+                                      "part_of.context"]),
+      Executor = FindFieldByTagOrName(["current_location.executor",
+                                       "current_location_package.executor"]),
+      Id = FindFieldByTagOrName(["current_location.lref",
+                                 "part_of.lref"]),
+      Name = FindFieldByTagOrName(["current_location.name",
+                                   "part_of"]),
+      Notes = FindFieldByTagOrName(["current_location.notes",
+                                    "current_location_package.notes"]),
+      StartDate = FindFieldByTagOrName(["current_location.date",
+                                        "current_location_package.date"]),
+      StartTime = FindFieldByTagOrName(["current_location.time",
+                                        "current_location_package.time"]),
       Suitability = FindFieldByTagOrName("current_location.suitability"),
       Type = FindFieldByTagOrName("current_location.type")
     };
 
     LocationHistoryFields = new LocationFieldData
     {
-      Authorizer = FindFieldByTagOrName("location.history.authoriser"),
-      AuthorizerId = FindFieldByTagOrName("location.history.authoriser.lref"),
-      Barcode = FindFieldByTagOrName("location.history.barcode"),
-      Context = FindFieldByTagOrName("location.history.context"),
-      EndDate = FindFieldByTagOrName("location.history.date.end"),
-      EndTime = FindFieldByTagOrName("location.history.removal_time"),
-      Executor = FindFieldByTagOrName("location.history.executor"),
-      Id = FindFieldByTagOrName("location.history.lref"),
-      Name = FindFieldByTagOrName("location.history.name"),
-      Notes = FindFieldByTagOrName("location.history.notes"),
-      StartDate = FindFieldByTagOrName("location.history.date.start"),
-      StartTime = FindFieldByTagOrName("location.history.time"),
-      Suitability = FindFieldByTagOrName("location.history.suitability"),
+      Authorizer = FindFieldByTagOrName(["location.history.authoriser",
+                                         "location_history.authoriser"]),
+      AuthorizerId = FindFieldByTagOrName(["location.history.authoriser.lref",
+                                           "location_history.authoriser.lref"]),
+      Barcode = FindFieldByTagOrName(["location.history.barcode",
+                                      "location_history.location_package.barcode"]),
+      Context = FindFieldByTagOrName(["location.history.context",
+                                      "location_history.context"]),
+      EndDate = FindFieldByTagOrName(["location.history.date.end",
+                                      "location_history.date.end"]),
+      EndTime = FindFieldByTagOrName(["location.history.removal_time",
+                                      "location_history.removal_time"]),
+      Executor = FindFieldByTagOrName(["location.history.executor",
+                                       "location_history.executor"]),
+      Id = FindFieldByTagOrName(["location.history.lref",
+                                 "location_history.location_package.lref"]),
+      Name = FindFieldByTagOrName(["location.history.name",
+                                   "location_history.location_package"]),
+      Notes = FindFieldByTagOrName(["location.history.notes",
+                                    "location_history.notes"]),
+      StartDate = FindFieldByTagOrName(["location.history.date.start",
+                                        "location_history.date.start"]),
+      StartTime = FindFieldByTagOrName(["location.history.time",
+                                        "location_history.time"]),
+      Suitability = FindFieldByTagOrName(["location.history.suitability",
+                                          "location_history.suitability"]),
       Type = FindFieldByTagOrName("location.history.type")
     };
   }
 
-  public void GetRecordMetaDataFields()
+  /// <summary>
+  /// Gets the relevant condition related fields for the current database
+  /// </summary>
+  private void GetConditionFields()
+  {
+    ConditionFields = new ConditionFieldData
+    {
+      Id = FindFieldByTagOrName("condition.lref"),
+      Part = FindFieldByTagOrName("condition.part"),
+      Condition = FindFieldByTagOrName("condition"),
+      Notes = FindFieldByTagOrName("condition.notes"),
+      CheckName = FindFieldByTagOrName("condition.check.name"),
+      Date = FindFieldByTagOrName("condition.date")
+    };
+  }
+
+  /// <summary>
+  /// Retrieve the fields for record metadata
+  /// </summary>
+  private void GetRecordMetaDataFields()
   {
     InputGroup = new EditFieldData
     {
@@ -88,22 +153,38 @@ public class DatabaseData : FileData
     };
   }
 
-  public DatabaseData() : base(ObjectTypeEnum.Database, null, false)
-  {
-    CreateFullTextField();
-  }
-
-  private void CreateFullTextField()
+  void CreateFullTextField()
   {
     fullTextFieldData.Database = this;
     fullTextFieldData.IndexList?.Add
     (
       new IndexData(this)
+      {
+        Type = IndexTypeEnum.FreeText
+      }
     );
   }
 
-  protected override void Encode(Stream stream)
+  /// <summary>
+  /// Create a new databasedata object.
+  /// </summary>
+  public DatabaseData() : base(ObjectTypeEnum.Database, null, false)
   {
+
+    CreateFullTextField();
+  }
+
+
+  /// <summary>
+  /// Save to a stream
+  /// </summary>
+  /// <param name="stream"></param>
+  protected override void Encode(FileStream stream)
+  {
+    if (string.IsNullOrWhiteSpace(Name))
+    {
+      throw new DDException("Database property Name is not set");
+    }
     stream.WriteFixedLengthString(Version, VersionSize);
     stream.WriteInt16(Magic);
     WriteProperties(this, Properties, Children, stream, TextEncoding);
@@ -111,7 +192,14 @@ public class DatabaseData : FileData
 
   private const string VersionId = "ADL20";
 
-  protected override void Decode(Stream stream, bool trace)
+  /// <summary>
+  /// Read from a stream
+  /// </summary>
+  /// <param name="stream"></param>
+  /// <param name="trace"></param>
+  /// <exception cref="InvalidDataException"></exception>
+  /// <exception cref="InvalidMetaDataException"></exception>
+  protected override void Decode(FileStream stream, bool trace)
   {
     FieldData? field = null;
     EnumerationValueData? enumeration = null;
@@ -120,7 +208,7 @@ public class DatabaseData : FileData
     InternalLinkData? internalLink = null;
 
     Version = stream.ReadFixedLengthString(VersionSize);
-    if (Version != VersionId)
+    if (Version is not VersionId)
     {
       throw new InvalidDataException($"Invalid version identifier in file {FileName}, found = {Version}, but expected {VersionId}");
     }
@@ -128,9 +216,9 @@ public class DatabaseData : FileData
     Magic = stream.ReadInt16();
     TextEncoding = Magic switch
     {
-      32764 => Extensions.DosEncoding,
-      32754 => Extensions.WindowsEncoding,
-      32744 => Encoding.UTF8,
+      32_764 => Extensions.DosEncoding,
+      32_754 => Extensions.WindowsEncoding,
+      32_744 => Encoding.UTF8,
       _ => throw new InvalidDataException($"Invalid magic number in file {FileName}, number found = {Magic}"),
     };
 
@@ -144,16 +232,16 @@ public class DatabaseData : FileData
         {
           case ObjectTypeEnum.Database:
             ObjectType = objectType;
-            ReadProperties(this, Properties!, stream, TextEncoding, FileName, trace);
+            ReadProperties(this, Properties!, stream, TextEncoding, trace);
             break;
 
           case ObjectTypeEnum.Index:
-            Indexes.Add(new IndexData(objectType, stream, TextEncoding, FileName, this, trace));
+            Indexes.Add(new IndexData(objectType, stream, TextEncoding, this, trace));
             break;
 
           case ObjectTypeEnum.Field:
-            field = new FieldData(objectType, stream, TextEncoding, FileName, trace, this);
-            if (dataset != null)
+            field = new FieldData(objectType, stream, TextEncoding, trace, this);
+            if (dataset is not null)
             {
               dataset.Fields.Add(field);
             }
@@ -164,123 +252,123 @@ public class DatabaseData : FileData
             break;
 
           case ObjectTypeEnum.FieldName:
-            field?.Names.Add(new LanguageTextData(objectType, stream, TextEncoding, FileName, trace));
+            field!.Names.Add(new LanguageTextData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.Defaults:
-            field?.Defaults.Add(new LanguageTextData(objectType, stream, TextEncoding, FileName, trace));
+            field!.Defaults.Add(new LanguageTextData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.FieldMethodText:
-            field?.MethodTexts.Add(new LanguageTextData(objectType, stream, TextEncoding, FileName, trace));
+            field!.MethodTexts.Add(new LanguageTextData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.FieldLabelText:
-            field?.LabelTexts.Add(new LanguageTextData(objectType, stream, TextEncoding, FileName, trace));
+            field!.LabelTexts.Add(new LanguageTextData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.FieldRelationText:
-            field?.RelationTexts.Add(new LanguageTextData(objectType, stream, TextEncoding, FileName, trace));
+            field!.RelationTexts.Add(new LanguageTextData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.FieldReverseRelationText:
-            field?.ReverseRelationTexts.Add(new LanguageTextData(objectType, stream, TextEncoding, FileName, trace));
+            field!.ReverseRelationTexts.Add(new LanguageTextData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.DatabaseRights:
-            AccessRights.Add(new AccessRightsData(objectType, stream, TextEncoding, FileName, trace));
+            AccessRights.Add(new AccessRightsData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.DatasetRights:
-            dataset?.AccessRights.Add(new AccessRightsData(objectType, stream, TextEncoding, FileName, trace));
+            dataset!.AccessRights.Add(new AccessRightsData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.RecordTypeRights:
-            field?.RecordTypeRoles.Add(new AccessRightsData(objectType, stream, TextEncoding, FileName, trace));
+            field!.RecordTypeRoles.Add(new AccessRightsData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.FieldRights:
-            field?.AccessRights.Add(new AccessRightsData(objectType, stream, TextEncoding, FileName, trace));
+            field!.AccessRights.Add(new AccessRightsData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.EnumerationValueRights:
-            enumeration?.AccessRights.Add(new AccessRightsData(objectType, stream, TextEncoding, FileName, trace));
+            enumeration!.AccessRights.Add(new AccessRightsData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.DefaultPointerFileRights:
-            PointerFileAccessRights.Add(new AccessRightsData(objectType, stream, TextEncoding, FileName, trace));
+            PointerFileAccessRights.Add(new AccessRightsData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.CandidateTermRights:
-            CandidateTermAccessRights.Add(new AccessRightsData(objectType, stream, TextEncoding, FileName, trace));
+            CandidateTermAccessRights.Add(new AccessRightsData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.EnumerationValue:
-            field?.EnumerationValues.Add(enumeration = new EnumerationValueData(objectType, stream, TextEncoding, FileName, trace));
+            field?.EnumerationValues.Add(enumeration = new EnumerationValueData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.EnumerationValueText:
-            enumeration?.Add(new LanguageTextData(objectType, stream, TextEncoding, FileName, trace));
+            enumeration!.Add(new LanguageTextData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.MergeTag:
-            field?.MergeTags.Add(new MergeTagData(objectType, stream, TextEncoding, FileName, trace));
+            field!.MergeTags.Add(new MergeTagData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.WriteBackTag:
-            field?.WriteBackTags.Add(new MergeTagData(objectType, stream, TextEncoding, FileName, trace));
+            field!.WriteBackTags.Add(new MergeTagData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.MergeListTag:
-            field?.MergeListTags.Add(new MergeTagData(objectType, stream, TextEncoding, FileName, trace));
+            field!.MergeListTags.Add(new MergeTagData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.LanguageFieldTag:
-            field?.LanguageTags.Add(new LanguageTextData(objectType, stream, TextEncoding, FileName, trace));
+            field!.LanguageTags.Add(new LanguageTextData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.Dataset:
-            Datasets.Add(dataset = new DatasetData(objectType, stream, TextEncoding, FileName, trace));
+            Datasets.Add(dataset = new DatasetData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.InternalLink:
-            InternalLinks.Add(internalLink = new InternalLinkData(objectType, stream, TextEncoding, FileName, trace));
+            InternalLinks.Add(internalLink = new InternalLinkData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.FeedbackLink:
-            FeedbackLinks.Add(new FeedbackLinkData(objectType, stream, TextEncoding, FileName, trace));
+            FeedbackLinks.Add(new FeedbackLinkData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.ExternalSourceInfo:
-            field?.ExternalSources.Add(externalSource = new ExternalSourceData(objectType, stream, TextEncoding, FileName, trace));
+            field!.ExternalSources.Add(externalSource = new ExternalSourceData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.ExternalSourceName:
-            externalSource?.Names.Add(new LanguageTextData(objectType, stream, TextEncoding, FileName, trace));
+            externalSource!.Names.Add(new LanguageTextData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.ExternalSourceMapping:
-            externalSource?.Mapping.Add(new ExternalSourceMappingData(objectType, stream, TextEncoding, FileName, trace));
+            externalSource!.Mapping.Add(new ExternalSourceMappingData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.EnumerationValueRecordTypeRights:
-            enumeration?.RecordTypeAccessRights.Add(new AccessRightsData(objectType, stream, TextEncoding, FileName, trace));
+            enumeration!.RecordTypeAccessRights.Add(new AccessRightsData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.LinkControl:
-            internalLink?.Add(new LinkNodeData(objectType, stream, TextEncoding, FileName, trace));
+            internalLink!.Add(new LinkNodeData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.DefaultRecordRights:
-            DefaultRecordAccessRights.Add(new AccessRightsData(objectType, stream, TextEncoding, FileName, trace));
+            DefaultRecordAccessRights.Add(new AccessRightsData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.DataLanguage:
-            DefaultInvariantLanguages.Add(new DataLanguageData(objectType, stream, TextEncoding, FileName, trace));
+            DefaultInvariantLanguages.Add(new DataLanguageData(objectType, stream, TextEncoding, trace));
             break;
 
           case ObjectTypeEnum.MetadataMapping:
-            field?.MetadataMappings.Add(new MetadataMappingData(objectType, stream, TextEncoding, FileName, trace));
+            field!.MetadataMappings.Add(new MetadataMappingData(objectType, stream, TextEncoding, trace));
             break;
 
           default:
@@ -314,6 +402,9 @@ public class DatabaseData : FileData
   }
 
   UpdateLinksData? updateLinks;
+  /// <summary>
+  /// Update Links
+  /// </summary>
   [JsonIgnore]
   public UpdateLinksData UpdateLinks
   {
@@ -340,11 +431,11 @@ public class DatabaseData : FileData
   /// </summary>
   public string? Name
   {
-    get; private set;
+    get; set;
   }
 
   private string GetExtensionPath(string adaplPath, string extension)
-   => Path.GetFullPath(Path.Combine(Path.GetDirectoryName(PhysicalPath)!, adaplPath + extension));
+   => Path.GetFullPath(Path.Combine(Path.GetDirectoryName(FileName)!, adaplPath + extension));
 
   /// <summary>
   /// Before storage Adapl to be executed
@@ -371,16 +462,31 @@ public class DatabaseData : FileData
     }
   }
 
-  public string? BeforeStoragePythonScript { get; private set; }
+  /// <summary>
+  /// Python script to run before the storage of a record.
+  /// </summary>
+  public string? BeforeStoragePythonScript
+  {
+    get;
+    private set;
+  }
 
-  public string? BeforeStoragePowerShellScript { get; private set; }
+  /// <summary>
+  /// Python script to run after the storage of a record.
+  /// </summary>
+  public string? BeforeStoragePowerShellScript
+  {
+    get;
+    private set;
+  }
 
   /// <summary>
   /// Image database
   /// </summary>
   public string? ImageDatabase
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -388,7 +494,8 @@ public class DatabaseData : FileData
   /// </summary>
   internal string? MagicString
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -396,7 +503,8 @@ public class DatabaseData : FileData
   /// </summary>
   public bool? AuthorizationUsed
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -404,7 +512,8 @@ public class DatabaseData : FileData
   /// </summary>
   public AuthorizationTypeEnum? AuthorizationType
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -412,7 +521,8 @@ public class DatabaseData : FileData
   /// </summary>
   public string? AuthorizationUserTag
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -420,7 +530,8 @@ public class DatabaseData : FileData
   /// </summary>
   internal short MinimumRecordSize
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -428,7 +539,8 @@ public class DatabaseData : FileData
   /// </summary>
   internal string? LoggingFile
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -436,7 +548,8 @@ public class DatabaseData : FileData
   /// </summary>
   internal short Locale
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -444,7 +557,8 @@ public class DatabaseData : FileData
   /// </summary>
   public string? AfterRetrievalAdapl
   {
-    get; set;
+    get;
+    set;
   }
 
   /// <summary>
@@ -452,7 +566,8 @@ public class DatabaseData : FileData
   /// </summary>
   public DatabaseTypeEnum DatabaseType
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -460,7 +575,8 @@ public class DatabaseData : FileData
   /// </summary>
   public string? CopyRecordAdapl
   {
-    get; set;
+    get;
+    set;
   }
 
   /// <summary>
@@ -468,7 +584,8 @@ public class DatabaseData : FileData
   /// </summary>
   public bool? EnableLeftTruncation
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -476,7 +593,8 @@ public class DatabaseData : FileData
   /// </summary>
   public string? BeforeInputAdapl
   {
-    get; set;
+    get;
+    set;
   }
 
   /// <summary>
@@ -484,7 +602,8 @@ public class DatabaseData : FileData
   /// </summary>
   public string? BeforeEditAdapl
   {
-    get; set;
+    get;
+    set;
   }
 
   /// <summary>
@@ -492,7 +611,8 @@ public class DatabaseData : FileData
   /// </summary>
   public string? FieldAdapl
   {
-    get; set;
+    get;
+    set;
   }
 
   /// <summary>
@@ -500,7 +620,8 @@ public class DatabaseData : FileData
   /// </summary>
   public string? DSN
   {
-    get; set;
+    get;
+    set;
   }
 
   /// <summary>
@@ -508,7 +629,8 @@ public class DatabaseData : FileData
   /// </summary>
   internal string? ExternalTable
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -516,7 +638,8 @@ public class DatabaseData : FileData
   /// </summary>
   public string? SqlUserId
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -524,7 +647,8 @@ public class DatabaseData : FileData
   /// </summary>
   public string? SqlPassword
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -532,7 +656,8 @@ public class DatabaseData : FileData
   /// </summary>
   public EncryptionTypeEnum EncryptionType
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -540,7 +665,8 @@ public class DatabaseData : FileData
   /// </summary>
   internal short SortId
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -548,7 +674,8 @@ public class DatabaseData : FileData
   /// </summary>
   public AccessRightsEnum DefaultAccess
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -556,7 +683,8 @@ public class DatabaseData : FileData
   /// </summary>
   public string? RightsTag
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -564,7 +692,8 @@ public class DatabaseData : FileData
   /// </summary>
   public string? RecordOwnerTag
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -572,7 +701,8 @@ public class DatabaseData : FileData
   /// </summary>
   public string? SqlServer
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -580,7 +710,8 @@ public class DatabaseData : FileData
   /// </summary>
   public string? ThesaurusTermStatusTag
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -588,7 +719,8 @@ public class DatabaseData : FileData
   /// </summary>
   public string? DecimalSeparator
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -596,7 +728,8 @@ public class DatabaseData : FileData
   /// </summary>
   public bool? IncludeInFullTextIndex
   {
-    get; private set;
+    get;
+    private set;
   } = new();
 
   /// <summary>
@@ -604,7 +737,8 @@ public class DatabaseData : FileData
   /// </summary>
   public EnableJournalingOptionEnum? EnableJournal
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -612,7 +746,8 @@ public class DatabaseData : FileData
   /// </summary>
   public RecordOwnerTypeEnum RecordOwnerType
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -620,7 +755,8 @@ public class DatabaseData : FileData
   /// </summary>
   public bool? StoreModificationHistory
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -628,7 +764,8 @@ public class DatabaseData : FileData
   /// </summary>
   public string? RecordTypeTag
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -639,6 +776,12 @@ public class DatabaseData : FileData
     get;
     private set;
   } = [];
+
+  /// <summary>
+  /// Did we check the existence of SQL index tables?
+  /// </summary>
+  [JsonIgnore]
+  public bool IndexTablesChecked { get; set; }
 
   /// <summary>
   /// A list of indexes
@@ -686,9 +829,10 @@ public class DatabaseData : FileData
   /// <summary>
   /// A list of access rights.
   /// </summary>
-  public List<AccessRightsData> AccessRights
+  public AccessControlList AccessRights
   {
-    get; private set;
+    get;
+    private set;
   } = [];
 
   /// <summary>
@@ -696,13 +840,14 @@ public class DatabaseData : FileData
   /// </summary>
   public List<FeedbackLinkData> FeedbackLinks
   {
-    get; private set;
+    get;
+    private set;
   } = [];
 
   /// <summary>
   /// A list of default access rights for pointer files.
   /// </summary>
-  public List<AccessRightsData> PointerFileAccessRights
+  public AccessControlList PointerFileAccessRights
   {
     get;
     private set;
@@ -711,7 +856,7 @@ public class DatabaseData : FileData
   /// <summary>
   /// A list of access rights for candidate terms.
   /// </summary>
-  public List<AccessRightsData> CandidateTermAccessRights
+  public AccessControlList CandidateTermAccessRights
   {
     get;
     private set;
@@ -720,7 +865,7 @@ public class DatabaseData : FileData
   /// <summary>
   /// The default record access rights.
   /// </summary>
-  public List<AccessRightsData> DefaultRecordAccessRights
+  public AccessControlList DefaultRecordAccessRights
   {
     get;
     private set;
@@ -735,59 +880,63 @@ public class DatabaseData : FileData
     private set;
   } = [];
 
+  /// <summary>
+  /// Override ToString, handy for debugging
+  /// </summary>
+  /// <returns></returns>
   public override string? ToString() => Name;
 
   internal static PropertyList Properties =
   [
-    new PropertyMap (0,  DataTypesEnum.Int16,  "ElementCount"),
-    new PropertyMap (1,  DataTypesEnum.String, "Name"),
-    new PropertyMap (5,  DataTypesEnum.String, "BeforeStorageAdapl"),
-    new PropertyMap (6,  DataTypesEnum.String, "ImageDatabase"),
-    new PropertyMap (7,  DataTypesEnum.String, "MagicString"),
-    new PropertyMap (8,  DataTypesEnum.Bool,   "AuthorizationUsed"),
-    new PropertyMap (9,  DataTypesEnum.Enum,   "AuthorizationType", typeof(AuthorizationTypeEnum)),
-    new PropertyMap (10, DataTypesEnum.String, "AuthorizationUserTag"),
-    new PropertyMap (12, DataTypesEnum.Int16,  "MinimumRecordSize"),
-    new PropertyMap (13, DataTypesEnum.String, "LoggingFile"),
-    new PropertyMap (17, DataTypesEnum.Int16,  "Locale"),
-    new PropertyMap (18, DataTypesEnum.String, "AfterRetrievalAdapl"),
-    new PropertyMap (19, DataTypesEnum.Enum,   "DatabaseType", typeof(DatabaseTypeEnum)),
-    new PropertyMap (20, DataTypesEnum.String, "CopyRecordAdapl"),
-    new PropertyMap (21, DataTypesEnum.Bool,   "EnableLeftTruncation"),
-    new PropertyMap (22, DataTypesEnum.String, "BeforeInputAdapl"),
-    new PropertyMap (23, DataTypesEnum.String, "BeforeEditAdapl"),
-    new PropertyMap (24, DataTypesEnum.String, "FieldAdapl"),
-    new PropertyMap (25, DataTypesEnum.String, "DSN"),
-    new PropertyMap (26, DataTypesEnum.String, "ExternalTable"),
-    new PropertyMap (29, DataTypesEnum.String, "SqlUserId"),
-    new PropertyMap (30, DataTypesEnum.String, "SqlPassword"),
-    new PropertyMap (31, DataTypesEnum.Enum32, "EncryptionType", typeof(EncryptionTypeEnum)),
-    new PropertyMap (32, DataTypesEnum.Int16,  "SortId"),
-    new PropertyMap (33, DataTypesEnum.Enum32, "DefaultAccess", typeof(AccessRightsEnum)),
-    new PropertyMap (34, DataTypesEnum.String, "RightsTag"),
-    new PropertyMap (35, DataTypesEnum.String, "RecordOwnerTag"),
-    new PropertyMap (36, DataTypesEnum.String, "SqlServer"),
-    new PropertyMap (37, DataTypesEnum.String, "ThesaurusTermStatusTag"),
-    new PropertyMap (38, DataTypesEnum.Bool,   "IncludeInFullTextIndex"),
-    new PropertyMap (39, DataTypesEnum.String, "DecimalSeparator"),
-    new PropertyMap (42, DataTypesEnum.Enum,   "EnableJournal", typeof(EnableJournalingOptionEnum)),
-    new PropertyMap (43, DataTypesEnum.Enum,   "RecordOwnerType", typeof(RecordOwnerTypeEnum)),
-    new PropertyMap (44, DataTypesEnum.Bool,   "StoreModificationHistory"),
-    new PropertyMap (46, DataTypesEnum.String, "RecordTypeTag")
+    new PropertyMap (0,  DataTypesEnum.Int16,  nameof(ElementCount)),
+    new PropertyMap (1,  DataTypesEnum.String, nameof(Name)),
+    new PropertyMap (5,  DataTypesEnum.String, nameof(BeforeStorageAdapl)),
+    new PropertyMap (6,  DataTypesEnum.String, nameof(ImageDatabase)),
+    new PropertyMap (7,  DataTypesEnum.String, nameof(MagicString)),
+    new PropertyMap (8,  DataTypesEnum.Bool,   nameof(AuthorizationUsed)),
+    new PropertyMap (9,  DataTypesEnum.Enum,   nameof(AuthorizationType), typeof(AuthorizationTypeEnum)),
+    new PropertyMap (10, DataTypesEnum.String, nameof(AuthorizationUserTag)),
+    new PropertyMap (12, DataTypesEnum.Int16,  nameof(MinimumRecordSize)),
+    new PropertyMap (13, DataTypesEnum.String, nameof(LoggingFile)),
+    new PropertyMap (17, DataTypesEnum.Int16,  nameof(Locale)),
+    new PropertyMap (18, DataTypesEnum.String, nameof(AfterRetrievalAdapl)),
+    new PropertyMap (19, DataTypesEnum.Enum,   nameof(DatabaseType), typeof(DatabaseTypeEnum)),
+    new PropertyMap (20, DataTypesEnum.String, nameof(CopyRecordAdapl)),
+    new PropertyMap (21, DataTypesEnum.Bool,   nameof(EnableLeftTruncation)),
+    new PropertyMap (22, DataTypesEnum.String, nameof(BeforeInputAdapl)),
+    new PropertyMap (23, DataTypesEnum.String, nameof(BeforeEditAdapl)),
+    new PropertyMap (24, DataTypesEnum.String, nameof(FieldAdapl)),
+    new PropertyMap (25, DataTypesEnum.String, nameof(DSN)),
+    new PropertyMap (26, DataTypesEnum.String, nameof(ExternalTable)),
+    new PropertyMap (29, DataTypesEnum.String, nameof(SqlUserId)),
+    new PropertyMap (30, DataTypesEnum.String, nameof(SqlPassword)),
+    new PropertyMap (31, DataTypesEnum.Enum32, nameof(EncryptionType), typeof(EncryptionTypeEnum)),
+    new PropertyMap (32, DataTypesEnum.Int16,  nameof(SortId)),
+    new PropertyMap (33, DataTypesEnum.Enum32, nameof(DefaultAccess), typeof(AccessRightsEnum)),
+    new PropertyMap (34, DataTypesEnum.String, nameof(RightsTag)),
+    new PropertyMap (35, DataTypesEnum.String, nameof(RecordOwnerTag)),
+    new PropertyMap (36, DataTypesEnum.String, nameof(SqlServer)),
+    new PropertyMap (37, DataTypesEnum.String, nameof(ThesaurusTermStatusTag)),
+    new PropertyMap (38, DataTypesEnum.Bool,   nameof(IncludeInFullTextIndex)),
+    new PropertyMap (39, DataTypesEnum.String, nameof(DecimalSeparator)),
+    new PropertyMap (42, DataTypesEnum.Enum,   nameof(EnableJournal), typeof(EnableJournalingOptionEnum)),
+    new PropertyMap (43, DataTypesEnum.Enum,   nameof(RecordOwnerType), typeof(RecordOwnerTypeEnum)),
+    new PropertyMap (44, DataTypesEnum.Bool,   nameof(StoreModificationHistory)),
+    new PropertyMap (46, DataTypesEnum.String, nameof(RecordTypeTag))
   ];
 
-  internal override (PropertyList, IEnumerable<object>)[] Children =>
+  internal override ChildrenList[] Children =>
    [
-      (IndexData.Properties, Indexes),
-      (FieldData.Properties, Fields),
-      (DatasetData.Properties, Datasets),
-      (InternalLinkData.Properties, InternalLinks),
-      (FeedbackLinkData.Properties, FeedbackLinks),
-      (AccessRightsData.Properties, AccessRights),
-      (AccessRightsData.Properties, PointerFileAccessRights),
-      (AccessRightsData.Properties, CandidateTermAccessRights),
-      (AccessRightsData.Properties, DefaultRecordAccessRights),
-      (DataLanguageData.Properties, DefaultInvariantLanguages)
+      new ChildrenList(Indexes, IndexData.Properties),
+      new ChildrenList(Fields, FieldData.Properties),
+      new ChildrenList(Datasets, DatasetData.Properties),
+      new ChildrenList(InternalLinks, InternalLinkData.Properties),
+      new ChildrenList(FeedbackLinks, FeedbackLinkData.Properties),
+      new ChildrenList(AccessRights, AccessRightsData.Properties),
+      new ChildrenList(PointerFileAccessRights, AccessRightsData.Properties),
+      new ChildrenList(CandidateTermAccessRights, AccessRightsData.Properties),
+      new ChildrenList(DefaultRecordAccessRights, AccessRightsData.Properties),
+      new ChildrenList(DefaultInvariantLanguages, DataLanguageData.Properties)
    ];
 
   private readonly JsonSerializerOptions options = new()
@@ -801,39 +950,75 @@ public class DatabaseData : FileData
   /// </summary>
   /// <param name="fileName"></param>
   public void SaveToJson(string fileName)
-  {
-    File.WriteAllText(fileName, Utilities.JsonSerializer.Serialize(this, options));
-  }
+    => File.WriteAllText(fileName, Utilities.JsonSerializer.Serialize(this, options));
 
-  public string? GetFieldNameByTag(string? tag) => Fields.FirstOrDefault(field => field.Tag == tag)?.Name;
+  /// <summary>
+  /// Get the fieldname for a field with a given tag
+  /// </summary>
+  /// <param name="tag">The tag to search for</param>
+  /// <returns>field name if found, ontherwise null</returns>
+  public string? GetFieldNameByTag(string? tag)
+    => Fields.FirstOrDefault(field => field.Tag == tag)?.Name;
 
+  /// <summary>
+  /// Find a field by its name or tag.
+  /// </summary>
+  /// <param name="tagOrFieldName"></param>
+  /// <returns></returns>
   public FieldData? FindFieldByTagOrName(string tagOrFieldName)
   {
     var (root, remainder) = FieldData.GetRoot(tagOrFieldName);
     return FindFieldByTagOrName(root, remainder);
   }
 
+  /// <summary>
+  /// Find a field by any of the tags or names in the list.
+  /// </summary>
+  /// <param name="tagOrFieldName"></param>
+  /// <returns></returns>
+  public FieldData? FindFieldByTagOrName(IEnumerable<string> tagOrFieldName)
+  {
+    foreach (var item in tagOrFieldName)
+    {
+      var fieldData = FindFieldByTagOrName(item);
+      if (fieldData is not null)
+      {
+        return fieldData;
+      }
+    }
+    return null;
+  }
+
+  /// <summary>
+  /// Find a field by tag or fieldname, it can handle indirection (->)
+  /// After the field is found, the rest of the indirection path is returned in remainder
+  /// </summary>
+  /// <param name="tagOrFieldName"></param>
+  /// <param name="remainder"></param>
+  /// <returns></returns>
+  /// <exception cref="FullTextNotEnabledException"></exception>
   public FieldData? FindFieldByTagOrName(string tagOrFieldName, string? remainder)
   {
     var fieldData = Fields.FirstOrDefault(f => f.Tag == tagOrFieldName); // First try the tag
     fieldData ??= Fields.FirstOrDefault(f => f.Name == tagOrFieldName);  // if not found try the (neutral) name
-    // if still not found try the names in the different languages
+                                                                         // if still not found try the names in the different languages
     fieldData ??= Fields.FirstOrDefault(f => f.Names.FirstOrDefault(n => n.Text == tagOrFieldName) != null);
 
-    if (fieldData != null && remainder != null && remainder.Length > 0)
+    if (fieldData is not null && remainder is not null && remainder.Length > 0)
     {
-      if (!fieldData.IsLinked || fieldData.LinkedDatabase == null)
+      if (!fieldData.IsLinked || fieldData.LinkedDatabase is null)
       {
         return null;
       }
-      return fieldData.LinkedDatabase.FindFieldByTagOrName(remainder) == null ? null : fieldData;
+      return fieldData.LinkedDatabase.FindFieldByTagOrName(remainder) is null
+        ? null : fieldData;
     }
 
-    if (fieldData == null)
+    if (fieldData is null)
     {
       if (tagOrFieldName == "fulltext")
       {
-        if (FullText)
+        if (IsFullTextEnabled)
         {
           fieldData = fullTextFieldData;
         }
@@ -880,6 +1065,11 @@ public class DatabaseData : FileData
     return fieldData;
   }
 
+  /// <summary>
+  /// Find a field by its merge tag
+  /// </summary>
+  /// <param name="tag"></param>
+  /// <returns></returns>
   public FieldData? FindFieldByMergeTag(string tag)
     => Fields
       .Where(field => field.IsLinked && field.MergeTags.Count > 0)
@@ -899,8 +1089,13 @@ public class DatabaseData : FileData
     return Fields.FirstOrDefault(field => field.LinkIdTag == tag);
   }
 
-  private readonly ConcurrentDictionary<string, List<FieldData>> groupCache = [];
-  public List<FieldData>? FindGroup(string groupName)
+  private readonly ConcurrentDictionary<string, FieldList> groupCache = [];
+  /// <summary>
+  /// Return the list of fields given a group 
+  /// </summary>
+  /// <param name="groupName"></param>
+  /// <returns></returns>
+  public FieldList? FindGroup(string groupName)
   {
     if (!groupCache.TryGetValue(groupName, out var list))
     {
@@ -925,14 +1120,23 @@ public class DatabaseData : FileData
     return string.IsNullOrWhiteSpace(group) ? [field] : FindGroup(group)!;
   }
 
+  /// <summary>
+  /// The extension of the filename that holds the metadata.
+  /// </summary>
   [JsonIgnore]
   public static string Extension => ".inf";
 
+  /// <summary>
+  /// The name of the full text table for this database.
+  /// </summary>
   [JsonIgnore]
   public string FullTextTable => $"{Name}_fullText";
 
+  /// <summary>
+  /// Flag to indicate that the SQL database has full text indexing enabled.
+  /// </summary>
   [JsonIgnore]
-  public bool FullText => IncludeInFullTextIndex.HasValue && IncludeInFullTextIndex.Value;
+  public bool IsFullTextEnabled => IncludeInFullTextIndex.HasValue && IncludeInFullTextIndex.Value;
 
   /// <summary>
   /// Input fields
@@ -952,16 +1156,65 @@ public class DatabaseData : FileData
   [JsonIgnore]
   public EditFieldData EditHistoryGroup { get; private set; }
 
+  /// <summary>
+  /// Gets or sets the home location field data associated with this entity
+  /// </summary>
+  [JsonIgnore]
+  public LocationFieldData? HomeLocationFields { get; private set; }
+
+  /// <summary>
+  /// Gets or sets the historical location field data associated with this entity.
+  /// </summary>
   [JsonIgnore]
   public LocationFieldData? LocationHistoryFields { get; set; }
+
+  /// <summary>
+  /// Gets the location-related field data associated with this instance.
+  /// </summary>
   [JsonIgnore]
   public LocationFieldData? LocationFields { get; private set; }
+
+  /// <summary>
+  /// Boolean to indicate whether this database supports home locations
+  /// </summary>
   [JsonIgnore]
-  public bool SupportsMove => LocationFields?.Id != null;
+  public bool SupportsHomeLocation => HomeLocationFields?.Id is not null;
+
+  /// <summary>
+  /// Boolean to indicate whether this database supports movements
+  /// </summary>
   [JsonIgnore]
-  public bool SupportsMoveHistory => LocationHistoryFields?.Id != null;
+  public bool SupportsMove => LocationFields?.Id is not null;
+
+  /// <summary>
+  /// Boolean to indicate whether this database supports movement history
+  /// </summary>
   [JsonIgnore]
-  public IEnumerable<FieldData> AutomaticNumberingFields { get; private set; }
+  public bool SupportsMoveHistory => LocationHistoryFields?.Id is not null;
+
+  /// <summary>
+  /// Gets or sets the condition-related <see cref="FieldData"/> associated with this instance
+  /// </summary>
+  [JsonIgnore]
+  public ConditionFieldData? ConditionFields { get; private set; }
+
+  /// <summary>
+  /// <see cref="bool"/> to indicate whether this database supports conditions
+  /// </summary>
+  [JsonIgnore]
+  public bool SupportsConditions => ConditionFields?.Id is not null;
+
+  /// <summary>
+  /// The list with autonumbering fields.
+  /// </summary>
+  [JsonIgnore]
+  public IEnumerable<FieldData> AutomaticNumberingFields { get; private set; } = [];
+
+  /// <summary>
+  /// A list with fields that have default values.
+  /// </summary>
+  [JsonIgnore]
+  public IEnumerable<FieldData> DefaultValueFields { get; private set; } = [];
 
   private readonly FieldData fullTextFieldData = new()
   {
@@ -970,13 +1223,19 @@ public class DatabaseData : FileData
     IsLinkIdField = false
   };
 
+  /// <summary>
+  /// Is this an indexed link, this is new for Axiell Collections to spead up link retrieval,
+  /// Not implemented in DD Software yet
+  /// </summary>
+  /// <param name="tag"></param>
+  /// <returns></returns>
   public InternalLinkData? IsIndexedLink(string tag)
   {
     InternalLinkData? internalLinkInfo = null;
     var fieldInfo = FindFieldByTagOrName(tag);
     if (fieldInfo != null)
     {
-      if (fieldInfo.IsLinkRef)
+      if (fieldInfo.IsLinkIdField)
       {
         fieldInfo = FindFieldByLinkIdTag(tag);
       }

@@ -1,7 +1,16 @@
 ﻿namespace DDigit.MetaData;
 
+/// <summary>
+/// A cache that keeps all metadata objects.
+/// </summary>
 public class MetaDataCache
 {
+  /// <summary>
+  /// Read an application object
+  /// </summary>
+  /// <param name="folder"></param>
+  /// <param name="trace"></param>
+  /// <returns></returns>
   public static ApplicationData? ReadApplication(string folder, bool trace)
     => ReadFromCache<ApplicationData>(ApplicationFileInfo(folder).FullName, trace);
 
@@ -13,8 +22,19 @@ public class MetaDataCache
   private static FileInfo ApplicationFileInfo(string folder) =>
     new(ApplicationFile(folder));
 
+  /// <summary>
+  /// Retrieve a list of names objects in the cache
+  /// </summary>
+  /// <returns>A list of names.</returns>
   public static List<string> GetCacheEntries() => [.. cache.ToFrozenDictionary().Keys];
 
+  /// <summary>
+  /// Get a list odf database objects.
+  /// </summary>
+  /// <param name="workingDirectory"></param>
+  /// <param name="databaseName"></param>
+  /// <param name="trace"></param>
+  /// <returns></returns>
   public static IEnumerable<DatabaseData> FindDatabases(string workingDirectory, string? databaseName = "*", bool trace = false)
   {
     var result = new List<DatabaseData>();
@@ -29,6 +49,13 @@ public class MetaDataCache
     return result;
   }
 
+  /// <summary>
+  /// Find forms in the specified folder. The formName can include wildcards (* and ?).
+  /// </summary>
+  /// <param name="folder">The folder to search in</param>
+  /// <param name="formName">Name of the form</param>
+  /// <param name="trace">Trace flag</param>
+  /// <returns>A list with forms data</returns>
   public static IEnumerable<FormData> FindForms(string folder, string? formName = "*", bool trace = false)
   {
     var result = new List<FormData>();
@@ -43,6 +70,13 @@ public class MetaDataCache
     return result;
   }
 
+  /// <summary>
+  /// Read a database data object from disk.
+  /// </summary>
+  /// <param name="folder"></param>
+  /// <param name="database"></param>
+  /// <param name="trace"></param>
+  /// <returns></returns>
   public static DatabaseData? ReadDatabase(string folder, string database, bool trace = false)
   {
     var path = Path.Combine(folder, database);
@@ -54,7 +88,13 @@ public class MetaDataCache
     return ReadDatabase(path, trace);
   }
 
-  public static DatabaseData? ReadDatabase(string fileName, bool trace)
+  /// <summary>
+  /// Read a database definition of disk
+  /// </summary>
+  /// <param name="fileName"></param>
+  /// <param name="trace"></param>
+  /// <returns>A DatabaseData object</returns>
+  public static DatabaseData? ReadDatabase(string fileName, bool trace = false)
   {
     var greaterThan = fileName.IndexOf('>');
     if (greaterThan > 0)
@@ -62,9 +102,7 @@ public class MetaDataCache
       fileName = fileName[..greaterThan];
     }
     var databaseData = ReadFromCache<DatabaseData>(AddExtension(fileName.Replace('+', Path.DirectorySeparatorChar), DatabaseData.Extension), trace);
-    databaseData?.GetRecordMetaDataFields();
-    databaseData?.GetLocationFields();
-    databaseData?.GetAutoNumberingFields();
+    databaseData?.GetFieldCollections();
     return databaseData;
   }
 
@@ -75,10 +113,10 @@ public class MetaDataCache
     var fullName = fileInfo.FullName;
 
     var cacheItem = cache.GetCacheItem(fullName);
-    if (cacheItem != null)
+    if (cacheItem is not null)
     {
       result = cacheItem.Value as T;
-      if (result != null && fileInfo.LastWriteTime > result.DateTimeWritten)
+      if (result is not null && fileInfo.LastWriteTime > result.DateTimeWritten)
       {
         AddToCache<T>(fullName, fileName, trace);
       }
@@ -99,8 +137,8 @@ public class MetaDataCache
 
   static T AddToCache<T>(string key, string fileName, bool trace) where T : FileData, new()
   {
-    var result = new T() { FileName = fileName };
-    result.Read(trace);
+    var result = new T();
+    result.Read(fileName, trace);
     cache.Add(key, result, policy);
     return result;
   }
@@ -111,6 +149,12 @@ public class MetaDataCache
   private static FormData? ReadForm(string fileName, bool trace) =>
     ReadFromCache<FormData>(AddExtension(fileName, FormData.Extension), trace);
 
+  /// <summary>
+  /// Get the first database in a certain folder.
+  /// </summary>
+  /// <param name="folder"></param>
+  /// <param name="trace"></param>
+  /// <returns></returns>
   public static DatabaseData? FirstDatabase(string folder, bool trace)
   {
     var files = new DirectoryInfo(folder).GetFiles($"*{DatabaseData.Extension}");

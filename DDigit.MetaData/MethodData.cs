@@ -1,12 +1,25 @@
 ﻿namespace DDigit.MetaData;
 
+/// <summary>
+/// The data for a method.
+/// </summary>
 public class MethodData : BaseData, IHasScreens
 {
-  public MethodData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace) :
-    base(objectType, stream, encoding, fileName, Properties, trace)
+  /// <summary>
+  /// Constructor that read the data from a file.
+  /// </summary>
+  /// <param name="objectType"></param>
+  /// <param name="stream"></param>
+  /// <param name="encoding"></param>
+  /// <param name="trace"></param>
+  public MethodData(ObjectTypeEnum objectType, FileStream stream, Encoding encoding, bool trace) :
+    base(objectType, stream, encoding, Properties, trace)
   {
   }
 
+  /// <summary>
+  /// Contructor to create a new method
+  /// </summary>
   public MethodData() : base(ObjectTypeEnum.Method, Properties)
   {
   }
@@ -16,7 +29,8 @@ public class MethodData : BaseData, IHasScreens
   /// </summary>
   public MethodTypeEnum Type
   {
-    get; set;
+    get;
+    set;
   }
 
   /// <summary>
@@ -43,7 +57,8 @@ public class MethodData : BaseData, IHasScreens
   /// </summary>
   public string Index
   {
-    get; private set;
+    get;
+    private set;
   } = "";
 
   /// <summary>
@@ -51,7 +66,8 @@ public class MethodData : BaseData, IHasScreens
   /// </summary>
   public string Index2
   {
-    get; private set;
+    get;
+    private set;
   } = "";
 
   /// <summary>
@@ -59,7 +75,8 @@ public class MethodData : BaseData, IHasScreens
   /// </summary>
   public string Query
   {
-    get; private set;
+    get;
+    private set;
   } = "";
 
   /// <summary>
@@ -67,7 +84,8 @@ public class MethodData : BaseData, IHasScreens
   /// </summary>
   public string HelpKey
   {
-    get; private set;
+    get;
+    private set;
   } = "";
 
   /// <summary>
@@ -75,7 +93,8 @@ public class MethodData : BaseData, IHasScreens
   /// </summary>
   public string SortKey
   {
-    get; private set;
+    get;
+    private set;
   } = "";
 
   /// <summary>
@@ -83,7 +102,8 @@ public class MethodData : BaseData, IHasScreens
   /// </summary>
   public string SortType
   {
-    get; private set;
+    get;
+    private set;
   } = "";
 
   /// <summary>
@@ -91,7 +111,8 @@ public class MethodData : BaseData, IHasScreens
   /// </summary>
   public string SortOrder
   {
-    get; private set;
+    get;
+    private set;
   } = "";
 
   /// <summary>
@@ -99,7 +120,8 @@ public class MethodData : BaseData, IHasScreens
   /// </summary>
   public string SortAdapl
   {
-    get; private set;
+    get;
+    private set;
   } = "";
 
   /// <summary>
@@ -107,7 +129,8 @@ public class MethodData : BaseData, IHasScreens
   /// </summary>
   public TruncationTypeEnum TruncationType
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -115,7 +138,8 @@ public class MethodData : BaseData, IHasScreens
   /// </summary>
   public string Domain
   {
-    get; set;
+    get;
+    set;
   } = "";
 
   /// <summary>
@@ -123,7 +147,8 @@ public class MethodData : BaseData, IHasScreens
   /// </summary>
   public string InitialScreen
   {
-    get; private set;
+    get;
+    private set;
   } = "";
 
   /// <summary>
@@ -131,7 +156,8 @@ public class MethodData : BaseData, IHasScreens
   /// </summary>
   public string RangeNameIndex
   {
-    get; private set;
+    get;
+    private set;
   } = "";
 
   /// <summary>
@@ -139,7 +165,8 @@ public class MethodData : BaseData, IHasScreens
   /// </summary>
   public string IndexTags
   {
-    get; set;
+    get;
+    set;
   } = "";
 
   /// <summary>
@@ -147,32 +174,43 @@ public class MethodData : BaseData, IHasScreens
   /// </summary>
   public TextsList Texts
   {
-    get; private set;
+    get;
+    private set;
   } = [];
 
   /// <summary>
   /// THe list of screens
   /// </summary>
-  public List<LanguageTextData> Screens
+  public TextsList Screens
   {
-    get; private set;
+    get;
+    private set;
   } = [];
 
   /// <summary>
   /// A list of access rights.
   /// </summary>
-  public List<AccessRightsData> AccessRights
+  public AccessControlList AccessRights
   {
-    get; private set;
+    get;
+    private set;
   } = [];
 
+  /// <summary>
+  /// How are records sorted in this method.
+  /// </summary>
   public List<MethodSortSpecificationData> SortSpecification
   {
-    get; private set;
+    get;
+    private set;
   } = [];
 
   internal void Add(MethodSortSpecificationData methodSortSpecificationData) => SortSpecification.Add(methodSortSpecificationData);
 
+  /// <summary>
+  /// Override for debugging
+  /// </summary>
+  /// <returns></returns>
   public override string? ToString() => Title;
 
   internal static PropertyList Properties =
@@ -200,11 +238,11 @@ public class MethodData : BaseData, IHasScreens
     new PropertyMap (20, DataTypesEnum.String,  "IndexTags")
   ];
 
-  internal override (PropertyList, IEnumerable<object>)[] Children =>
+  internal override ChildrenList[] Children =>
    [
-     (LanguageTextData.Properties, Screens),
-     (LanguageTextData.Properties, Texts),
-     (MethodSortSpecificationData.Properties, SortSpecification),
-     (AccessRightsData.Properties, AccessRights)
+     new ChildrenList(Screens, LanguageTextData.Properties),
+     new ChildrenList(Texts, LanguageTextData.Properties),
+     new ChildrenList(SortSpecification, MethodSortSpecificationData.Properties),
+     new ChildrenList(AccessRights, AccessRightsData.Properties)
    ];
 }

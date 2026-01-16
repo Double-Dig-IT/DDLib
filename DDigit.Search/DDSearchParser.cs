@@ -1,4 +1,6 @@
-﻿namespace DDigit.Search;
+﻿using DDigit.MetaData;
+
+namespace DDigit.Search;
 
 public class DDSearchParser
 {
@@ -8,7 +10,10 @@ public class DDSearchParser
     {
       Database = databaseData,
       Statement = searchStatement,
-      Cancellation = cancellationToken,
+      SqlState = new SqlStateInfo
+      {
+        CancellationToken = cancellationToken,
+      }
     };
 
     this.databaseData = databaseData;
@@ -40,7 +45,7 @@ public class DDSearchParser
         {
           throw new UnexpectedTokenException(tokenizer.Accepted, string.Empty, searchStatement);
         }
-        searchTree.StartFrom = tokenizer.ExpectInteger();
+        searchTree.StartFrom = tokenizer.ExpectPositiveInteger();
         continue;
       }
 
@@ -50,7 +55,7 @@ public class DDSearchParser
         {
           throw new UnexpectedTokenException(tokenizer.Accepted, string.Empty, searchStatement);
         }
-        searchTree.Limit = tokenizer.ExpectInteger();
+        searchTree.Limit = tokenizer.ExpectPositiveInteger(0);
         continue;
       }
 
@@ -100,6 +105,39 @@ public class DDSearchParser
 
   private void ProcessToken(SearchTokenizer tokenizer, Stack<SearchNode> stack)
   {
+    void ExpectSimpleSearchStatement(SearchTokenizer tokenizer, Stack<SearchNode> stack)
+    {
+      if (!AcceptQSearch(tokenizer, stack) && !AcceptAllSearch(tokenizer, stack))
+      {
+        var fieldData = ExpectFieldName(tokenizer, databaseData!);
+        var sourceFieldData = fieldData;
+        var language = AcceptLanguage(tokenizer);
+        var op = ExpectOperator(tokenizer);
+        var linkPath = new List<SearchNode>();
+
+        if (!fieldData.IsLinked && fieldData.IsMergedField && op != SearchOperatorEnum.Indirection)
+        {
+          var linkedField = fieldData.LinkedFieldData!;
+          var linkSourceField = linkedField.LinkSourceField(fieldData);
+          linkPath.Add(new SearchTreeLeaf(linkSourceField!, null, op, language, null));
+          fieldData = linkedField;
+        }
+        else
+        {
+          while (op == SearchOperatorEnum.Indirection)
+          {
+            var linkedDatabaseData = fieldData.LinkedDatabase ?? throw new DDException($"field '{fieldData}' does not have a linked database");
+            var linkedField = ExpectFieldName(tokenizer, linkedDatabaseData);
+            var linkedLanguage = AcceptLanguage(tokenizer);
+            linkPath.Add(new SearchTreeLeaf(linkedField, null, op, linkedLanguage, null));
+            op = ExpectOperator(tokenizer);
+          }
+        }
+
+        var value = ExpectValue(sourceFieldData, tokenizer);
+        stack.Push(new SearchTreeLeaf(fieldData, value!, op, language, linkPath));
+      }
+    }
     if (tokenizer.Accept("("))
     {
       ProcessToken(tokenizer, stack);
@@ -109,7 +147,7 @@ public class DDSearchParser
     {
       if (tokenizer.Accept("set") || tokenizer.Accept("pointer"))
       {
-        stack.Push(new SearchSetLeaf(tokenizer.ExpectInteger()));
+        stack.Push(new SearchSetLeaf(tokenizer.ExpectPositiveInteger()));
       }
       else
       {
@@ -152,11 +190,10 @@ public class DDSearchParser
 
   private static void GetRandomFilter(SearchTree searchTree, SearchTokenizer tokenizer)
   {
-    searchTree.SampleSize = tokenizer.ExpectInteger();
-    searchTree.Seed = 0;
+    searchTree.SampleSize = tokenizer.ExpectPositiveInteger();
     if (tokenizer.Accept("seed"))
     {
-      searchTree.Seed = tokenizer.ExpectInteger();
+      searchTree.Seed = tokenizer.ExpectPositiveInteger();
     }
     searchTree.Unique = false;
     if (tokenizer.Accept("unique"))
@@ -214,37 +251,6 @@ public class DDSearchParser
     }
   }
 
-  private void ExpectSimpleSearchStatement(SearchTokenizer tokenizer, Stack<SearchNode> stack)
-  {
-    if (!AcceptQSearch(tokenizer, stack) && !AcceptAllSearch(tokenizer, stack))
-    {
-      var field = ExpectFieldName(tokenizer, databaseData!);
-      var language = AcceptLanguage(tokenizer);
-      var op = ExpectOperator(tokenizer);
-      var linkPath = new List<SearchNode>();
-
-      if (!field.IsLinked && field.IsMergedField && op != SearchOperatorEnum.Indirection)
-      {
-        var linkedField = field.LinkedFieldData!;
-        var linkSourceField = linkedField.LinkSourceField(field);
-        linkPath.Add(new SearchTreeLeaf(linkSourceField!, null, op, language, null));
-        field = linkedField;
-      }
-      else
-      {
-        while (op == SearchOperatorEnum.Indirection)
-        {
-          var linkedDatabaseData = field.LinkedDatabase ?? throw new DDException($"field '{field}' does not have a linked database");
-          var linkedField = ExpectFieldName(tokenizer, linkedDatabaseData);
-          var linkedLanguage = AcceptLanguage(tokenizer);
-          linkPath.Add(new SearchTreeLeaf(linkedField, null, op, linkedLanguage, null));
-          op = ExpectOperator(tokenizer);
-        }
-      }
-      var value = ExpectValue(field, tokenizer);
-      stack.Push(new SearchTreeLeaf(field, value!, op, language, linkPath));
-    }
-  }
 
   private static string? AcceptLanguage(SearchTokenizer tokenizer)
   {
@@ -287,7 +293,7 @@ public class DDSearchParser
     return result;
   }
 
-  private static long? ExpectLongValue(string? token)
+  private static long? ExpectLongValue(FieldData fieldData, string? token)
   {
     long? result = null;
     if (token != null)
@@ -299,6 +305,10 @@ public class DDSearchParser
         {
           result = number;
         }
+        else
+        {
+          throw new NotAnIntegerException(fieldData.Name, token);
+        }
       }
     }
     return result;
@@ -307,11 +317,11 @@ public class DDSearchParser
   private static object? ExpectValue(FieldData fieldData, SearchTokenizer tokenizer)
   {
     object? result = null;
-    if (tokenizer.Token != null)
+    if (tokenizer.Token is not null)
     {
       result = fieldData.Type switch
       {
-        FieldTypeEnum.Integer => ExpectLongValue(tokenizer.Token),  
+        FieldTypeEnum.Integer => ExpectLongValue(fieldData, tokenizer.Token),
         FieldTypeEnum.DateEuropean or
         FieldTypeEnum.DateGeneral or
         FieldTypeEnum.DateUsa or
@@ -330,11 +340,11 @@ public class DDSearchParser
       var today = DateTime.Now;
       if (tokenizer.Accept("-"))
       {
-        return FormatDate(fieldData.Type, today.AddDays(-tokenizer.ExpectInteger()));
+        return FormatDate(fieldData.Type, today.AddDays(-tokenizer.ExpectPositiveInteger()));
       }
       if (tokenizer.Accept("+"))
       {
-        return FormatDate(fieldData.Type, today.AddDays(tokenizer.ExpectInteger()));
+        return FormatDate(fieldData.Type, today.AddDays(tokenizer.ExpectPositiveInteger()));
       }
       return FormatDate(fieldData.Type, today);
     }

@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
-VisualStudioVersion = 18.0.11222.15 d18.0
+VisualStudioVersion = 18.0.11222.15
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DDigit.Classes", "DDigit.Classes\DDigit.Classes.csproj", "{D942BA8E-DF83-49D1-BE92-8C3C4F0FB81A}"
 EndProject
@@ -28,6 +28,12 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DDigit.ScriptingLibrary", "DDigit.ScriptingLibrary\DDigit.ScriptingLibrary.csproj", "{69EC3943-F45D-0690-7AE3-DC0200969288}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DDigit.Scripting", "DDigit.Powershell\DDigit.Scripting.csproj", "{FAE9246F-A577-93B1-2A94-1147B4DB8792}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DDigit.ExternalDataSources", "DDigit.ExternalDataSources\DDigit.ExternalDataSources.csproj", "{B090CB00-746A-F0F2-1407-443590157013}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DDigit.RecordTransactions", "DDigit.RecordTransactions\DDigit.RecordTransactions.csproj", "{4A90C9A5-75CC-BE6D-E92D-8D526D2A5969}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DDigit.Results", "DDigit.Results\DDigit.Results.csproj", "{AE732E04-4C98-F24C-7149-BDC1686F17F8}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -75,6 +81,18 @@ Global
 		{FAE9246F-A577-93B1-2A94-1147B4DB8792}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{FAE9246F-A577-93B1-2A94-1147B4DB8792}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{FAE9246F-A577-93B1-2A94-1147B4DB8792}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B090CB00-746A-F0F2-1407-443590157013}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B090CB00-746A-F0F2-1407-443590157013}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B090CB00-746A-F0F2-1407-443590157013}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B090CB00-746A-F0F2-1407-443590157013}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4A90C9A5-75CC-BE6D-E92D-8D526D2A5969}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4A90C9A5-75CC-BE6D-E92D-8D526D2A5969}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4A90C9A5-75CC-BE6D-E92D-8D526D2A5969}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4A90C9A5-75CC-BE6D-E92D-8D526D2A5969}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AE732E04-4C98-F24C-7149-BDC1686F17F8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AE732E04-4C98-F24C-7149-BDC1686F17F8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AE732E04-4C98-F24C-7149-BDC1686F17F8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AE732E04-4C98-F24C-7149-BDC1686F17F8}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

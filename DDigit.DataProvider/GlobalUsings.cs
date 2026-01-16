@@ -1,10 +1,14 @@
 ﻿global using DDigit.Classes;
 global using DDigit.Data;
 global using DDigit.Exceptions;
+global using DDigit.ExternalDataSources;
 global using DDigit.MetaData;
 global using DDigit.Repository;
+global using DDigit.ScriptingLibrary;
 global using DDigit.Search;
 global using DDigit.Utilities;
-
+global using Microsoft.Data.SqlClient;
 global using System.Data;
-global using System.Management.Automation.Runspaces;
+global using System.Diagnostics;
+global using System.Runtime.ExceptionServices;
+global using System.Text;

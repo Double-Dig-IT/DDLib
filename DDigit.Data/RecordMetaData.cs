@@ -39,7 +39,7 @@ public static class RecordMetaData
 
     static void SetEditMetaData(Record record, EditFieldData edit, EditData editData)
     {
-      if (edit.Date != null)
+      if (edit.Date is not null)
       {
         for (int occ = record.RepCount(edit.Date) + 1; occ > 1; occ--)
         {
@@ -119,13 +119,13 @@ public static class RecordMetaData
         Notes = notes
       };
 
-      if (record.Id == 0 && record[inputGroup.Date!] == null)
+      if (record.Id == 0 && record[inputGroup.Date!] is null)
       {
         SetEditGroup(record, inputGroup, 1, editData);  // for a new record
       }
       else
       {
-        if (record.Database!.EditHistoryGroup.Date == null)
+        if (record.Database!.EditHistoryGroup.Date is null)
         {
           SetEditMetaData(record, editGroup, editData); // for an existing record without an edit history
         }

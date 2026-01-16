@@ -1,6 +1,13 @@
 ﻿namespace DDigit.MetaData;
 
-public class ExportJobData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace) :
-  JobData(objectType, stream, encoding, fileName, trace)
+/// <summary>
+/// Contains metata for a an export job
+/// </summary>
+/// <param name="objectType"></param>
+/// <param name="stream"></param>
+/// <param name="encoding"></param>
+/// <param name="trace"></param>
+public class ExportJobData(ObjectTypeEnum objectType, FileStream stream, Encoding encoding, bool trace) :
+  JobData(objectType, stream, encoding, trace)
 {
 }

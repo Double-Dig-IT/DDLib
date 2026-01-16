@@ -149,6 +149,16 @@ public class SearchTokenizer
     return number;
   }
 
+  internal int ExpectPositiveInteger(int max = 1)
+  {
+    if (!int.TryParse(Token, out int number) || number < max)
+    {
+      throw new PositiveIntegerExpectedException(Token);
+    }
+    GetToken();
+    return number;
+  }
+
   public override string? ToString() => Token;
 
   internal string Statement { get; private set; }

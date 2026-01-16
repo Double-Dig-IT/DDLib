@@ -1,7 +1,15 @@
 ﻿namespace DDigit.MetaData;
 
-public class EnumerationValueData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace) :
-  BaseData(objectType, stream, encoding, fileName, Properties, trace)
+/// <summary>
+/// A clas that holds information about an enumeration value, the neutral value
+/// and its text in various languages.
+/// </summary>
+/// <param name="objectType"></param>
+/// <param name="stream"></param>
+/// <param name="encoding"></param>
+/// <param name="trace"></param>
+public class EnumerationValueData(ObjectTypeEnum objectType, FileStream stream, Encoding encoding, bool trace) :
+  BaseData(objectType, stream, encoding, Properties, trace)
 {
 
   /// <summary>
@@ -16,7 +24,7 @@ public class EnumerationValueData(ObjectTypeEnum objectType, Stream stream, Enco
   /// <summary>
   /// Th language dependent texts.
   /// </summary>
-  public List<LanguageTextData> Texts
+  public TextsList Texts
   {
     get; private set;
   } = [];
@@ -24,7 +32,7 @@ public class EnumerationValueData(ObjectTypeEnum objectType, Stream stream, Enco
   /// <summary>
   /// The access rights for enumeration value.
   /// </summary>
-  public List<AccessRightsData> AccessRights
+  public AccessControlList AccessRights
   {
     get;
     internal set;
@@ -34,11 +42,16 @@ public class EnumerationValueData(ObjectTypeEnum objectType, Stream stream, Enco
   /// <summary>
   /// Where is this used?
   /// </summary>
-  public List<AccessRightsData> RecordTypeAccessRights
+  public AccessControlList RecordTypeAccessRights
   {
-    get; internal set;
+    get;
+    internal set;
   } = [];
 
+  /// <summary>
+  /// ToString() method, handy for debugging.
+  /// </summary>
+  /// <returns></returns>
   public override string? ToString() => NeutralValue;
 
   internal void Add(LanguageTextData languageTextData) => Texts.Add(languageTextData);
@@ -52,10 +65,10 @@ public class EnumerationValueData(ObjectTypeEnum objectType, Stream stream, Enco
     new PropertyMap (4,  DataTypesEnum.Skip),
   ];
 
-  internal override (PropertyList, IEnumerable<object>)[] Children =>
+  internal override ChildrenList[] Children =>
   [
-      (LanguageTextData.Properties, Texts),
-      (AccessRightsData.Properties, AccessRights),
-      (AccessRightsData.Properties, RecordTypeAccessRights),
+      new ChildrenList(Texts, LanguageTextData.Properties),
+      new ChildrenList(AccessRights, AccessRightsData.Properties),
+      new ChildrenList(RecordTypeAccessRights, AccessRightsData.Properties),
   ];
 }

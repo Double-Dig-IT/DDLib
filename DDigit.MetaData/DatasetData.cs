@@ -1,8 +1,28 @@
 ﻿namespace DDigit.MetaData;
 
-public class DatasetData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace) :
-  BaseData(objectType, stream, encoding, fileName, Properties, trace)
+/// <summary>
+/// Metadata for a dataset.
+/// </summary>
+public class DatasetData : BaseData
 {
+  /// <summary>
+  /// Contructor to read the object from disk
+  /// </summary>
+  /// <param name="objectType"></param>
+  /// <param name="stream"></param>
+  /// <param name="encoding"></param>
+  /// <param name="trace"></param>
+  public DatasetData(ObjectTypeEnum objectType, FileStream stream, Encoding encoding, bool trace) :
+    base(objectType, stream, encoding, Properties, trace)
+  {
+  }
+
+  /// <summary>
+  /// Constructor to create an empty <see cref="DatasetData"/>
+  /// </summary>
+  public DatasetData() : base(ObjectTypeEnum.Dataset)
+  {
+  }
 
   /// <summary>
   /// The name of the dataset
@@ -31,7 +51,7 @@ public class DatasetData(ObjectTypeEnum objectType, Stream stream, Encoding enco
   /// <summary>
   /// A list of access rights.
   /// </summary>
-  public List<AccessRightsData> AccessRights
+  public AccessControlList AccessRights
   {
     get; private set;
   } = [];
@@ -45,22 +65,26 @@ public class DatasetData(ObjectTypeEnum objectType, Stream stream, Encoding enco
     private set;
   } = [];
 
+  /// <summary>
+  /// Override for debugging.
+  /// </summary>
+  /// <returns></returns>
   public override string ToString() => $"{Name} {LowerLimit}-{UpperLimit}";
 
   internal static readonly PropertyList Properties =
   [
-     new PropertyMap (0, DataTypesEnum.Int16,  "ElementCount"),
-     new PropertyMap (1, DataTypesEnum.String, "Name"),
-     new PropertyMap (2, DataTypesEnum.Int32,  "LowerLimit"),
-     new PropertyMap (3, DataTypesEnum.Int32,  "UpperLimit"),
+     new PropertyMap (0, DataTypesEnum.Int16,  nameof(ElementCount)),
+     new PropertyMap (1, DataTypesEnum.String, nameof(Name)),
+     new PropertyMap (2, DataTypesEnum.Int32,  nameof(LowerLimit)),
+     new PropertyMap (3, DataTypesEnum.Int32,  nameof(UpperLimit)),
      new PropertyMap (4, DataTypesEnum.Skip),
      new PropertyMap (5, DataTypesEnum.Skip),
      new PropertyMap (6, DataTypesEnum.Skip),
   ];
 
-  internal override (PropertyList, IEnumerable<object>)[] Children =>
+  internal override ChildrenList[] Children =>
   [
-      (AccessRightsData.Properties, AccessRights),
-      (FieldData.Properties, Fields)
+      new ChildrenList(AccessRights, AccessRightsData.Properties),
+      new ChildrenList(Fields, FieldData.Properties)
   ];
 }

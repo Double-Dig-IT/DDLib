@@ -2,7 +2,7 @@
 
 public abstract class IndexRow(IndexData index, string? tag, int occ, int id)
 {
-  public IndexData? Index { get; set; } = index;
+  public IndexData Index { get; set; } = index;
 
   public string Table { get; private set; } = index.TableName;
 

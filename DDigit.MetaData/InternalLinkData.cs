@@ -9,11 +9,10 @@ namespace DDigit.MetaData;
 /// <param name="objectType"></param>
 /// <param name="stream"></param>
 /// <param name="encoding"></param>
-/// <param name="filename"></param>
 /// <param name="trace"></param>
 
-public class InternalLinkData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? filename, bool trace) :
-  BaseData(objectType, stream, encoding, filename, Properties, trace)
+public class InternalLinkData(ObjectTypeEnum objectType, FileStream stream, Encoding encoding, bool trace) :
+  BaseData(objectType, stream, encoding, Properties, trace)
 {
 
   /// <summary>
@@ -56,7 +55,9 @@ public class InternalLinkData(ObjectTypeEnum objectType, Stream stream, Encoding
     get; private set;
   }
 
-
+  /// <summary>
+  /// Related term link id tag
+  /// </summary>
   public string? RelatedTermLinkIdTag
   {
     get; private set;
@@ -70,6 +71,9 @@ public class InternalLinkData(ObjectTypeEnum objectType, Stream stream, Encoding
     get; private set;
   }
 
+  /// <summary>
+  /// equivalent term link id tag.
+  /// </summary>
   public string? EquivalentTermLinkIdTag
   {
     get; private set;
@@ -83,6 +87,9 @@ public class InternalLinkData(ObjectTypeEnum objectType, Stream stream, Encoding
     get; private set;
   }
 
+  /// <summary>
+  /// Use term link id tag.
+  /// </summary>
   public string? UseTermLinkIdTag
   {
     get; private set;
@@ -96,6 +103,9 @@ public class InternalLinkData(ObjectTypeEnum objectType, Stream stream, Encoding
     get; private set;
   }
 
+  /// <summary>
+  /// Used for link id tag
+  /// </summary>
   public string? UsedForTermLinkIdTag
   {
     get; private set;
@@ -207,11 +217,15 @@ public class InternalLinkData(ObjectTypeEnum objectType, Stream stream, Encoding
   }
 
 
+  /// <summary>
+  /// To string (for debugging)
+  /// </summary>
+  /// <returns></returns>
   public override string ToString() => $"{RelationType} {TermTag}";
 
   internal void Add(LinkNodeData node)
   {
-    if (node.ParentID == null)
+    if (node.ParentID is null)
     {
       LinkControlNodes.Add(node);
     }

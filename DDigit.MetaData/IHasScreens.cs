@@ -2,7 +2,7 @@
 
 internal interface IHasScreens
 {
-  List<LanguageTextData> Screens
+  TextsList Screens
   {
     get;
   }

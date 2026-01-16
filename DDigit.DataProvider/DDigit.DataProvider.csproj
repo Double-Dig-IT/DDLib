@@ -1,22 +1,23 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.PowerShell.Commands.Diagnostics" Version="7.5.2" />
-    <PackageReference Include="Microsoft.PowerShell.Commands.Management" Version="7.5.2" />
-    <PackageReference Include="Microsoft.PowerShell.Commands.Utility" Version="7.5.2" />
-    <PackageReference Include="Microsoft.PowerShell.ConsoleHost" Version="7.5.2" />
-    <PackageReference Include="Microsoft.WSMan.Management" Version="7.5.2" />
-    <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="10.0.0-preview.1.25080.5" />
-    <PackageReference Include="System.Management.Automation" Version="7.5.2" />
+    <PackageReference Include="Microsoft.PowerShell.Commands.Diagnostics" Version="7.5.4" />
+    <PackageReference Include="Microsoft.PowerShell.Commands.Management" Version="7.5.4" />
+    <PackageReference Include="Microsoft.PowerShell.Commands.Utility" Version="7.5.4" />
+    <PackageReference Include="Microsoft.PowerShell.ConsoleHost" Version="7.5.3" />
+    <PackageReference Include="Microsoft.WSMan.Management" Version="7.5.4" />
+    <PackageReference Include="System.Diagnostics.PerformanceCounter" Version="10.0.1" />
+    <PackageReference Include="System.Management.Automation" Version="7.5.4" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\DDigit.Data\DDigit.Data.csproj" />
     <ProjectReference Include="..\DDigit.Exceptions\DDigit.Exceptions.csproj" />
+    <ProjectReference Include="..\DDigit.ExternalDataSources\DDigit.ExternalDataSources.csproj" />
     <ProjectReference Include="..\DDigit.Repository\DDigit.Repository.csproj" />
     <ProjectReference Include="..\DDigit.ScriptingLibrary\DDigit.ScriptingLibrary.csproj" />
     <ProjectReference Include="..\DDigit.Search\DDigit.Search.csproj" />

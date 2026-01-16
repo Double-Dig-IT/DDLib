@@ -1,7 +1,7 @@
 ﻿namespace DDigit.MetaData;
 
-public class FriendlyDatabaseData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace) :
-  BaseData(objectType, stream, encoding, fileName, Properties, trace)
+public class FriendlyDatabaseData(ObjectTypeEnum objectType, FileStream stream, Encoding encoding, bool trace) :
+  BaseData(objectType, stream, encoding, Properties, trace)
 {
   public string? DatabasePath
   {
@@ -57,7 +57,10 @@ public class FriendlyDatabaseData(ObjectTypeEnum objectType, Stream stream, Enco
     get; private set;
   } = [];
 
-  public List<AccessRightsData> AccessRights
+  /// <summary>
+  /// Access Control List for this friendly database.
+  /// </summary>
+  public AccessControlList AccessRights
   {
     get; private set;
   } = [];
@@ -80,9 +83,9 @@ public class FriendlyDatabaseData(ObjectTypeEnum objectType, Stream stream, Enco
     new PropertyMap (9,  DataTypesEnum.Skip)
   ];
 
-  internal override (PropertyList, IEnumerable<object>)[] Children =>
+  internal override ChildrenList[] Children =>
   [
-     (LanguageTextData.Properties, Texts),
-     (AccessRightsData.Properties, AccessRights),
+     new ChildrenList(Texts, LanguageTextData.Properties),
+     new ChildrenList(AccessRights, AccessRightsData.Properties),
   ];
 }

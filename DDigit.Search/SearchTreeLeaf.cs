@@ -6,7 +6,7 @@ public class SearchTreeLeaf : SearchNode
                         List<SearchNode>? indirectionFields)
   {
     Field = field;
-    if (value != null)
+    if (value is not null)
     {
       Values.Add(value);
     }
@@ -18,7 +18,7 @@ public class SearchTreeLeaf : SearchNode
   public SearchTreeLeaf(FieldData? field, object? value)
   {
     Field = field;
-    if (value != null)
+    if (value is not null)
     {
       Values.Add(value);
     }

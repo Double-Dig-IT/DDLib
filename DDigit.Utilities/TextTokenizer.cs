@@ -2,7 +2,7 @@
 {
   public class TextTokenizer
   {
-    public static List<string> GetWords(string language, object? data)
+    public static List<string> GetWords(object? data, bool isQuery = false)
     {
       var text = data as string;
       var result = new List<string>();
@@ -17,6 +17,11 @@
         while (cp < text.Length)
         {
           var ch = text[cp++];
+
+          if (!isQuery && WildCard(ch))
+          {
+            continue;
+          }
 
           if (Ignore(ch))
           {
@@ -66,12 +71,14 @@
 
     private readonly static string Concatenators = "+-'`_/\\";
 
-    private static bool IsSeparator(char ch) => Separators.Contains(ch);
+    private static bool IsSeparator(char ch) => char.IsWhiteSpace(ch) || Separators.Contains(ch);
 
-    private readonly static string Separators = " \t\n\r,;<>[]{}()";
+    private readonly static string Separators = ",;<>[]{}()";
 
     private static bool Ignore(char ch) => IgnoreCharacters.Contains(ch);
 
-    private readonly static string IgnoreCharacters = "?!*&%^#$=";
+    private readonly static string IgnoreCharacters = "?!&%^#$=";
+
+    private static bool WildCard(char ch) => ch == '*';
   }
 }

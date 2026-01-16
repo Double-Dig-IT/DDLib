@@ -8,5 +8,7 @@ public enum SearchOperatorEnum
   GreaterOrEquals,
   SmallerOrEquals,
   Indirection,
-  Generic
+  Generic,
+  Path,
+  Under
 }

@@ -1,7 +1,4 @@
-﻿
-
-
-namespace DDigit.Data;
+﻿namespace DDigit.Data;
 
 public class OccurrenceList : List<Occurrence>
 {

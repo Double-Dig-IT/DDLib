@@ -41,28 +41,32 @@ public partial class DDataProvider : IDataProvider
       DatasetFilter = datasetFilter,
       Milestone = Milestone,
       MilestoneReached = MilestoneReached,
-      Cancellation = cancellationToken
+      SqlState = new SqlStateInfo
+      {
+        Connection = null,
+        Transaction = null,
+        CancellationToken = cancellationToken
+      }
     };
 
-    return await FindRecordSetAsync(searchTree, (SearchTreeLeaf)searchTree.Root!);
+    return await SearchWithSortAsync(searchTree, searchTree.Root);
   }
 
   internal async Task<ResultSet> FindRecordSetAsync(SearchTree searchTree, SearchTreeLeaf leaf)
   {
-    async Task<ResultSet> FindFlatRecordSetAsync(SearchTree searchTree, SearchTreeLeaf leaf, IDbTransaction? transaction)
+    async Task<ResultSet> FindFlatRecordSetAsync()
     {
-      using var command = searchTree.Connection!.CreateCommand();
+      using var command = searchTree.SqlState.Connection!.CreateCommand();
 
       var field = leaf.Field ?? throw new NullReferenceException(nameof(leaf.Field));
       var result = field.PreferredIndex != null ?
         await Repository.FindFlatIndexedRecordSetAsync(command, searchTree, leaf) :
-        await FindNonIndexedRecordSetAsync(command, searchTree, leaf, transaction);
+        await FindNonIndexedRecordSetAsync(command);
 
       return result;
     }
 
-    async Task<ResultSet> FindNonIndexedRecordSetAsync(IDbCommand command, SearchTree searchTree,
-                                   SearchTreeLeaf leaf, IDbTransaction? transaction)
+    async Task<ResultSet> FindNonIndexedRecordSetAsync(IDbCommand command)
     {
       var field = leaf.Field ?? throw new NullReferenceException(nameof(leaf.Field));
       var databaseData = field.Database ?? throw new NullReferenceException(nameof(field.Database));
@@ -72,33 +76,36 @@ public partial class DDataProvider : IDataProvider
       var allRecords = await Repository.ReadAllRecordsAsync(command, searchTree);
       foreach (var id in allRecords.Ids)
       {
-        var record = await ReadRecordAsync(databaseData, id, searchTree.Connection, transaction, searchTree.Cancellation);
+        var record = await ReadRecordAsync(databaseData, id, searchTree.SqlState);
         if (record != null)
+          if (searchTree.Milestone > 0)
+          {
         {
           if (record.Match(field, leaf.Values))
           {
             result.Ids.Add(id);
           }
-          count++;
-          if (count % searchTree.Milestone == 0)
-          {
-            searchTree.MilestoneReached?.Invoke(null, new MilestoneEventArgs(count, allRecords.Ids.Count));
+            count++;
+            if (count % searchTree.Milestone == 0)
+            {
+              searchTree.MilestoneReached?.Invoke(null, new MilestoneEventArgs(count, allRecords.Ids.Count));
+            }
           }
         }
       }
       return result;
     }
 
-    searchTree.Connection = await Repository.GetDbConnectionAsync(searchTree.Database!);
+    searchTree.SqlState.Connection = await Repository.GetDbConnectionAsync(searchTree.Database!);
 
     await Repository.PreparePreviousResultTable(searchTree);
 
     var field = leaf.Field ?? throw new NullReferenceException(nameof(leaf.Field));
-    var result = field.IsLinked ? await Repository.FindLinkedRecordSetAsync(searchTree, leaf) : await FindFlatRecordSetAsync(searchTree, leaf, null);
+    var result = field.IsLinked ? await Repository.FindLinkedRecordSetAsync(searchTree, leaf) : await FindFlatRecordSetAsync();
 
     await Repository.DropPreviousResultTable(searchTree);
-    searchTree.Connection.Dispose();
-    searchTree.Connection = null;
+    searchTree.SqlState.Connection.Dispose();
+    searchTree.SqlState.Connection = null;
 
     return result;
   }

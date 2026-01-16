@@ -1,7 +1,7 @@
 ﻿namespace DDigit.MetaData;
 
-public class ExternalSourceData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace) :
-  BaseData(objectType, stream, encoding, fileName, Properties, trace)
+public class ExternalSourceData(ObjectTypeEnum objectType, FileStream stream, Encoding encoding, bool trace) :
+  BaseData(objectType, stream, encoding, Properties, trace)
 {
 
   /// <summary>
@@ -47,7 +47,7 @@ public class ExternalSourceData(ObjectTypeEnum objectType, Stream stream, Encodi
     internal set;
   }
 
-  
+
   /// <summary>
   /// The name the external source.
   /// </summary>
@@ -95,6 +95,10 @@ public class ExternalSourceData(ObjectTypeEnum objectType, Stream stream, Encodi
   } = [];
 
 
+  /// <summary>
+  /// For debugging
+  /// </summary>
+  /// <returns></returns>
   public override string? ToString() => Name;
 
   internal static readonly PropertyList Properties =
@@ -111,11 +115,11 @@ public class ExternalSourceData(ObjectTypeEnum objectType, Stream stream, Encodi
     new PropertyMap(9, DataTypesEnum.Skip),
   ];
 
-  internal override (PropertyList, IEnumerable<object>)[]? Children =>
+  internal override ChildrenList[]? Children =>
     [
-       (LanguageTextData.Properties, Names),
-       (ExternalSourceSortData.Properties, Sort),
-       (ExternalSourceMappingData.Properties, Mapping),
+       new ChildrenList(Names, LanguageTextData.Properties),
+       new ChildrenList(Sort, ExternalSourceSortData.Properties),
+       new ChildrenList(Mapping, ExternalSourceMappingData.Properties),
     ];
 
 }

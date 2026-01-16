@@ -1,9 +1,11 @@
-﻿namespace DDigit.Repository;
+﻿using System.Management.Automation.Runspaces;
+
+namespace DDigit.Repository;
 
 public partial class MSSqlRepository : IDDRepository
 {
   public async Task<RecordSetList> GetRecordSetMetaDataPerDatabaseAsync(DatabaseData database, string? searchTerm = null,
-                                                                             int startFrom = 1, int limit = 0,
+                                                                             int startFrom = 1, int limit = 0, RecordSetSortEnum? sort = null, SearchSortOrderEnum? sortOrder = null,
                                                                              CancellationToken cancellationToken = default)
   {
     var result = new RecordSetList();
@@ -15,7 +17,7 @@ public partial class MSSqlRepository : IDDRepository
       int current = 1;
       int hits = 0;
       using var command = connection.CreateCommand() as SqlCommand;
-      command!.CommandText = SqlBuilder.GetSetData(table, searchTerm);
+      command!.CommandText = SqlBuilder.GetSetData(table, searchTerm, sort, sortOrder is SearchSortOrderEnum.Descending);
       if (!string.IsNullOrWhiteSpace(searchTerm))
       {
         command.Parameters.AddWithValue("term", $"%{searchTerm}%");
@@ -56,6 +58,13 @@ public partial class MSSqlRepository : IDDRepository
     return connection;
   }
 
+  public IDbConnection GetDbConnection(DatabaseData database)
+  {
+    var connection = new SqlConnection(GetConnectionString(database));
+    connection.Open();
+    return connection;
+  }
+
   private static string GetConnectionString(DatabaseData database)
   {
     var connectionString = new SqlConnectionStringBuilder
@@ -64,7 +73,9 @@ public partial class MSSqlRepository : IDDRepository
       InitialCatalog = database.DSN,
       Encrypt = false,
       Pooling = true,
-      MultipleActiveResultSets = true
+      MaxPoolSize = 8,
+      ApplicationName = "DDLib",
+      MultipleActiveResultSets = false //true
     };
 
     if (!string.IsNullOrWhiteSpace(database.SqlUserId) &&
@@ -81,104 +92,139 @@ public partial class MSSqlRepository : IDDRepository
     return connectionString.ToString();
   }
 
-  public async Task<int> AddWord(IDbConnection connection, IDbTransaction transaction, string word, string language,
-                                 CancellationToken cancellationToken)
+  public async Task<int> AddWord(string word, string language, SqlStateInfo sqlState)
   {
     word = SqlBuilder.MaxLength(word);
 
-    using var command = connection!.CreateCommand() as SqlCommand;
-    if (command == null)
-    {
-      throw new NullReferenceException(nameof(command));
-    }
-    command.Transaction = (SqlTransaction)transaction;
+    using var command = (SqlCommand)sqlState.Connection!.CreateCommand();
+    command.Transaction = (SqlTransaction)sqlState.Transaction!;
     command.CommandText = SqlBuilder.SelectHighestWordNumber;
-    var wordNumber = (int?)await command.ExecuteScalarAsync(cancellationToken)! + 1;
+    var wordNumber = (int?)await command.ExecuteScalarAsync(sqlState.CancellationToken)! + 1;
     command.CommandText = SqlBuilder.AddWord;
     command.Parameters.Add(new SqlParameter("term", word));
     command.Parameters.Add(new SqlParameter("displayTerm", word));
     command.Parameters.Add(new SqlParameter("language", language));
     command.Parameters.Add(new SqlParameter("wordNumber", wordNumber));
-    await command.ExecuteNonQueryAsync(cancellationToken);
+    await command.ExecuteNonQueryAsync(sqlState.CancellationToken);
     return wordNumber != null ? wordNumber.Value : 0;
   }
 
-  public async Task<int> GetWordNumber(IDbConnection connection, IDbTransaction transaction, string word, string language)
+  public async Task<int> GetWordNumberAsync(string word, string language, SqlStateInfo sqlState)
   {
-    using var command = (SqlCommand)connection.CreateCommand();
-    command.Transaction = (SqlTransaction)transaction;
+    using var command = (SqlCommand)sqlState.Connection!.CreateCommand();
+    command.Transaction = (SqlTransaction)sqlState.Transaction!;
     command.CommandText = SqlBuilder.GetWordNumber;
     command.Parameters.Add(new SqlParameter("term", word));
     command.Parameters.Add(new SqlParameter("language", language));
-    var result = await command.ExecuteScalarAsync();
+    var result = await command.ExecuteScalarAsync(sqlState.CancellationToken);
     return result != null && result != DBNull.Value ? (int)result : 0;
   }
 
-  public async Task<int> FindLink(string table, DatasetData? dataset, string? domain, string key, string language,
-                                  IDbConnection connection,
-                                  IDbTransaction transaction,
-                                  CancellationToken cancellationToken)
+  public async Task<int> FindLink(string table, DatasetData? dataset, string? tag, string? domain, string key,
+                                  bool isMultiLingual, string language, SqlStateInfo sqlState)
   {
-    using var command = (SqlCommand)connection.CreateCommand();
-    command.Transaction = (SqlTransaction)transaction;
-    command.CommandText = SqlBuilder.FindLink(table, domain, language, dataset);
-    command.Parameters.Add(new SqlParameter("term", key));
-    if (language != null)
+    using var command = (SqlCommand)sqlState.Connection!.CreateCommand();
+    command.Transaction = (SqlTransaction)sqlState.Transaction!;
+    command.CommandText = SqlBuilder.FindLink(table, tag, domain, isMultiLingual, language, dataset);
+
+    command.Parameters.AddWithValue("term", key);
+
+    if (tag is not null)
     {
-      command.Parameters.Add(new SqlParameter("language", language));
+      command.Parameters.AddWithValue("tag", tag);
     }
-    if (domain != null)
+
+    if (isMultiLingual && language is not null)
     {
-      command.Parameters.Add(new SqlParameter("domain", domain));
+      command.Parameters.AddWithValue("language", language);
     }
-    if (dataset != null)
+
+    if (domain is not null)
     {
-      command.Parameters.Add(new SqlParameter("lower", dataset.LowerLimit));
-      command.Parameters.Add(new SqlParameter("upper", dataset.UpperLimit));
+      command.Parameters.AddWithValue("domain", domain);
     }
-    var result = await command.ExecuteScalarAsync(cancellationToken);
-    return result != null && result != DBNull.Value ? (int)result : 0;
+
+    if (dataset is not null)
+    {
+      command.Parameters.AddWithValue("lower", dataset.LowerLimit);
+      command.Parameters.AddWithValue("upper", dataset.UpperLimit);
+    }
+
+    var result = await command.ExecuteScalarAsync(sqlState.CancellationToken);
+    return result is not null && result != DBNull.Value ? (int)result : 0;
   }
 
-  public async Task<object> ReadDataAsync(DatabaseData database, int id,
-                             IDbConnection? connection,
-                             IDbTransaction? transaction,
-                             CancellationToken cancellationToken)
+  public async Task<object> ReadDataAsync(DatabaseData database, int id, SqlStateInfo sqlState)
   {
-
-    var currentConnection = (SqlConnection)(connection ?? await GetDbConnectionAsync(database));
-    var currentTransaction = (SqlTransaction)(transaction ?? await StartTransactionAsync(currentConnection));
-    var table = database.Name ?? throw new NullReferenceException(nameof(database.Name));
+    var createConnection = sqlState.Connection is null;
+    var createTransaction = sqlState.Transaction is null;
 
     try
     {
-      using var command = currentConnection.CreateCommand();
-      command.Transaction = currentTransaction;
-      command.CommandText = SqlBuilder.SelectData(table);
-      command.Parameters.AddWithValue("id", id);
-      var result = await command.ExecuteScalarAsync(cancellationToken);
-      if (transaction == null)
+      if (createConnection)
       {
-        await currentTransaction.CommitAsync(cancellationToken);
+        sqlState.Connection = await GetDbConnectionAsync(database);
       }
-      if (connection == null)
+
+      if (createTransaction)
       {
-        currentConnection.Dispose();
+        sqlState.Transaction = await StartTransactionAsync(sqlState.Connection!);
+      }
+
+      await using var command = ((SqlConnection)sqlState.Connection!).CreateCommand();
+      command.Transaction = (SqlTransaction?)sqlState.Transaction;
+      command.CommandText = SqlBuilder.SelectData(database.Name!);
+      command.Parameters.AddWithValue("id", id);
+      var result = await command.ExecuteScalarAsync(sqlState.CancellationToken);
+
+      if (createTransaction)
+      {
+        await ((SqlTransaction)sqlState.Transaction!).CommitAsync(CancellationToken.None);
+        await ((SqlTransaction)sqlState.Transaction!).DisposeAsync();
+        sqlState.Transaction = null;
+      }
+
+      if (createConnection)
+      {
+        await ((SqlConnection)sqlState.Connection!).DisposeAsync();
+        sqlState.Connection = null;
       }
       return result;
     }
-    catch (Exception)
+
+    catch (OperationCanceledException) when (sqlState.CancellationToken.IsCancellationRequested)
     {
-      if (transaction == null)
+      if (createTransaction && sqlState.Transaction is SqlTransaction transaction && transaction.Connection is not null)
       {
-        await currentTransaction.RollbackAsync(cancellationToken);
-      }
-      if (connection == null)
-      {
-        await currentConnection.DisposeAsync();
+        await transaction.RollbackAsync(CancellationToken.None);
       }
       throw;
     }
+
+    catch
+    {
+      if (createTransaction && sqlState.Transaction is SqlTransaction transaction && transaction.Connection is not null)
+      {
+        await transaction.RollbackAsync(CancellationToken.None);
+      }
+      throw;
+    }
+
+    finally
+    {
+      if (createTransaction && sqlState.Transaction is SqlTransaction transaction)
+      {
+        await transaction.DisposeAsync();
+        sqlState.Transaction = null;
+      }
+
+      if (createConnection && sqlState.Connection is SqlConnection connection)
+      {
+        await connection.DisposeAsync();
+        sqlState.Connection = null;
+      }
+    }
+
   }
 
   public async Task<IEnumerable<RecordLock>> GetRecordLock(DatabaseData databaseData, CancellationToken cancellationToken)
@@ -215,18 +261,16 @@ public partial class MSSqlRepository : IDDRepository
     using var command = connection.CreateCommand();
     command.CommandText = SqlBuilder.SelectFromHitList(database.Name!);
     command.Parameters.Add(new SqlParameter("@set", set));
-    var result = await ReadIds(searchTree, database, command);
-    connection.Dispose();
-    return result;
+    return await ReadIds(searchTree, database, command);
   }
 
   public async Task PreparePreviousResultTable(SearchTree searchTree)
   {
     var previousResults = searchTree.PreviousResults;
-    var cancellationToken = searchTree.Cancellation;
+    var cancellationToken = searchTree.SqlState.CancellationToken;
     if (previousResults != null)
     {
-      if (searchTree.Connection is not SqlConnection sqlConnection)
+      if (searchTree.SqlState.Connection is not SqlConnection sqlConnection)
       {
         throw new NullReferenceException(nameof(sqlConnection));
       }
@@ -254,19 +298,19 @@ public partial class MSSqlRepository : IDDRepository
   {
     if (searchTree.PreviousResults != null)
     {
-      if (searchTree.Connection is not SqlConnection sqlConnection)
+      if (searchTree.SqlState.Connection is not SqlConnection sqlConnection)
       {
         throw new NullReferenceException(nameof(sqlConnection));
       }
       using var command = sqlConnection.CreateCommand();
       command.CommandText = SqlBuilder.DropPreviousResultsTable;
-      await command.ExecuteNonQueryAsync(searchTree.Cancellation);
+      await command.ExecuteNonQueryAsync(searchTree.SqlState.CancellationToken);
     }
   }
 
   public async Task<ResultSet> FindLinkedRecordSetAsync(SearchTree searchTree, SearchTreeLeaf leaf)
   {
-    if (searchTree.Connection is not SqlConnection sqlConnection)
+    if (searchTree.SqlState.Connection is not SqlConnection sqlConnection)
     {
       throw new NullReferenceException(nameof(sqlConnection));
     }
@@ -317,7 +361,7 @@ public partial class MSSqlRepository : IDDRepository
     var result = new ResultSet(databaseData);
 
     var previous = searchTree.PreviousResults != null ? new HashSet<int>(searchTree.PreviousResults.Ids) : null;
-    using var reader = await sqlCommand.ExecuteReaderAsync(searchTree.Cancellation);
+    using var reader = await sqlCommand.ExecuteReaderAsync(searchTree.SqlState.CancellationToken);
     while (await reader.ReadAsync())
     {
       result.Add(reader.GetInt32(0), searchTree.DatasetFilter, previous);
@@ -328,13 +372,35 @@ public partial class MSSqlRepository : IDDRepository
       result.Ids = [.. result.Ids.Distinct()];
       result.Ids.Sort();
     }
-    result.Count = result.Ids.Count;
-
+    result.Hits = result.Ids.Count;
     return result;
   }
 
   public async Task<ResultSet> FindFlatIndexedRecordSetAsync(IDbCommand command, SearchTree searchTree, SearchTreeLeaf leaf)
   {
+
+    /// <summary>
+    /// Convert a key according to index type, but pass through a single % (empty search)
+    /// </summary>
+    /// <param name="type"></param>
+    /// <param name="term"></param>
+    /// <param name="dateCompletion"></param>
+    /// <returns></returns>
+    /// <exception cref="NotImplementedException"></exception>
+    static object ConvertKey(IndexTypeEnum type, string term, DateCompletionEnum dateCompletion)
+     => (term == "%") ? term : type switch
+     {
+       IndexTypeEnum.Undefined => term,
+       IndexTypeEnum.Date => KeyConversions.DateTimeStringToInt(term),
+       IndexTypeEnum.Text => term,
+       IndexTypeEnum.FreeText => term,
+       IndexTypeEnum.Integer => Convert.ToInt32(term),
+       IndexTypeEnum.IsoDate => KeyConversions.IsoDateToDecimal(term, dateCompletion),
+       IndexTypeEnum.Boolean => term,
+       IndexTypeEnum.AlphaNumeric => term, //KeyConversions.AlphaKeyValue(term, 10),
+       _ => throw new NotImplementedException(),
+     };
+
     var field = leaf.Field ?? throw new NullReferenceException(nameof(leaf.Field));
     var index = field.PreferredIndex ?? throw new NullReferenceException(nameof(field.PreferredIndex));
 
@@ -356,7 +422,7 @@ public partial class MSSqlRepository : IDDRepository
           break;
 
         default:
-          if (field.Enumeration)
+          if (field.IsEnumeration)
           {
             EnumerativeSearch(searchTree, leaf, command);
           }
@@ -381,28 +447,6 @@ public partial class MSSqlRepository : IDDRepository
 
     return await ReadIds(searchTree, field.Database, sqlCommand);
   }
-
-  /// <summary>
-  /// Convert a key according to index type, but pass through a single % (empty search)
-  /// </summary>
-  /// <param name="type"></param>
-  /// <param name="term"></param>
-  /// <param name="dateCompletion"></param>
-  /// <returns></returns>
-  /// <exception cref="NotImplementedException"></exception>
-  private static object ConvertKey(IndexTypeEnum type, string term, DateCompletionEnum dateCompletion)
-    => (term == "%") ? term : type switch
-    {
-      IndexTypeEnum.Undefined => term,
-      IndexTypeEnum.Date => KeyConversions.DateTimeStringToInt(term),
-      IndexTypeEnum.Text => term,
-      IndexTypeEnum.FreeText => term,
-      IndexTypeEnum.Integer => Convert.ToInt32(term),
-      IndexTypeEnum.IsoDate => KeyConversions.IsoDateToDecimal(term, dateCompletion),
-      IndexTypeEnum.Boolean => term,
-      IndexTypeEnum.AlphaNumeric => term, //KeyConversions.AlphaKeyValue(term, 10),
-      _ => throw new NotImplementedException(),
-    };
 
 
   private static void TermSearch(SearchTree searchTree, SearchTreeLeaf leaf, IDbCommand command)
@@ -519,7 +563,7 @@ public partial class MSSqlRepository : IDDRepository
     }
 
     command.CommandText = leaf.SearchTerms.Count > 0 ?
-      database.FullText ?
+      database.IsFullTextEnabled ?
         SqlBuilder.EnumSearchFullText(searchTree, leaf, database.FullTextTable, field.Tag!) :
         SqlBuilder.EnumSearch(searchTree, leaf, index.TableName) :
        SqlBuilder.EmptySearch(index.TableName);
@@ -561,106 +605,76 @@ public partial class MSSqlRepository : IDDRepository
     return searchString.ToString(); ;
   }
 
-  public async Task<AutoCompleteResult?> GetAutoCompleteAsync(IEnumerable<FieldData> fields, DatasetFilter? datasetFilter,
-                                                         string? value, int? startFrom, int? limit, string? language, bool count,
+  public async Task<AutoCompleteResult?> GetAutoCompleteAsync(IEnumerable<FieldData> fields,
+                                                         DatasetFilter? datasetFilter,
+                                                         string? value, int? startFrom, int? limit,
+                                                         string? language,
+                                                         bool count,
                                                          CancellationToken cancellationToken)
   {
-    var result = new AutoCompleteResult(startFrom ?? 1, limit ?? 10);
+    var firstField = fields.FirstOrDefault() ??
+        throw new DDException("No field(s) requested for autocomplete");
 
-    var firstField = fields.FirstOrDefault() ?? throw new NullReferenceException(nameof(fields));
-    var databaseData = firstField.Database!;
-    var connection = await GetDbConnectionAsync(databaseData) as SqlConnection;
+    var databaseData = firstField.Database ??
+        throw new DDException($"Database is null for field {firstField.Name}");
 
-    try
+    using var connection = await GetDbConnectionAsync(databaseData) as SqlConnection ??
+        throw new DDException("No database connection for autocomplete");
+
+    var returnRows = startFrom + limit + 1; // return one more than the requested number of keys
+
+    Dictionary<string, object> Parameters = [];
+
+    string SaveParameter(string name, object value)
     {
-      if (connection == null)
-      {
-        throw new NullReferenceException(nameof(connection));
-      }
+      var parameterName = $"@{name}{Parameters.Count + 1}";
+      Parameters[parameterName] = value;
+      return parameterName;
+    }
 
+    IEnumerable<string> fieldSql()
+    {
+      var result = new List<string>();
+      foreach (var field in fields)
+      {
+        var index = field.PreferredIndex ??
+          throw new DDException($"No index for field {field}");
+
+        var indexTableName = index.TableName;
+
+        string Domain()
+          => !string.IsNullOrWhiteSpace(field.LinkDomain) ?
+            $"and domain = {SaveParameter("domain", field.LinkDomain)}" : "";
+        
+        result.Add(
+       $"""
+        select distinct value as term, [{indexTableName}].priref as priref from
+          [people_fullText] 
+          inner join [{indexTableName}] on [people_fullText].priref = [{indexTableName}].term
+          where tag = 'BA' {Domain()} and contains(value, @term1)
+          and ([{indexTableName}].priref between 1 and 25000000)) result
+          group by term
+       """
+        );
+      }
+      return result;
+    }
+
+    var sql =
+    $"""
+      declare @term1 nvarchar(40) = 'vries*'
+      select top {returnRows} term, [use] , sum(hits) as hits from (
+      select distinct term, '' as [use], count(priref) as hits from
+      (
+        {string.Join(" union", fieldSql())}
+      ) result
+       group by term, [use] order by term
+      """;
+
+    async Task<AutoCompleteResult> GetResult()
+    {
+      var result = new AutoCompleteResult(startFrom ?? 1, limit ?? 10);
       using var command = connection.CreateCommand();
-      var sql = new StringBuilder();
-      var returnRows = startFrom + limit + 1; // return one more than the requested number of keys
-      sql.AppendLine($"select top {returnRows} term, [use] , sum(hits) as hits from (");
-
-      var term = $"{value}%";
-      _ = int.TryParse(value, out int number);
-
-      int fieldNumber = 0;
-      foreach (var fieldData in fields)
-      {
-        fieldNumber++;
-        if (fieldNumber > 1)
-        {
-          sql.AppendLine(" union ");
-        }
-
-        var index = fieldData.PreferredIndex ?? throw new IndexNotFoundException(fieldData.Name);
-        switch (index.Type)
-        {
-          case IndexTypeEnum.FreeText:
-            if (databaseData.FullText)
-            {
-              sql.AppendLine(SqlBuilder.FullTextAutoComplete(databaseData.FullTextTable, value, fieldData.Tag, datasetFilter, fieldNumber));
-              command.Parameters.AddWithValue($"term{fieldNumber}", FullTextValue(value, true));
-            }
-            else
-            {
-              sql.AppendLine(SqlBuilder.FreeTextAutoComplete(index.TableName, datasetFilter, fieldNumber));
-              command.Parameters.AddWithValue($"term{fieldNumber}", term);
-            }
-            break;
-
-          case IndexTypeEnum.Integer:
-            if (fieldData.IsLinked)
-            {
-              sql.AppendLine(SqlBuilder.LinkedAutocomplete(fieldData, datasetFilter, fieldNumber, value));
-              if (fieldData.LinkedDatabase!.FullText)
-              {
-                command.Parameters.AddWithValue($"term{fieldNumber}", FullTextValue(value, true));
-              }
-              else
-              {
-                command.Parameters.AddWithValue($"term{fieldNumber}", term);
-              }
-            }
-            else
-            {
-              sql.AppendLine(SqlBuilder.IntegerAutoComplete(index.TableName, datasetFilter, fieldNumber));
-              command.Parameters.AddWithValue($"term{fieldNumber}", number);
-            }
-            break;
-
-          default:
-            if (fieldData.Enumeration)
-            {
-              AutoCompleteEnum(command, sql, index.TableName, datasetFilter, fieldNumber, fieldData, value, language, count);
-            }
-            else
-            {
-              if (databaseData.FullText)
-              {
-                sql.AppendLine(SqlBuilder.FullTextAutoComplete(databaseData.FullTextTable, value, fieldData.Tag, datasetFilter, fieldNumber));
-                command.Parameters.AddWithValue($"term{fieldNumber}", FullTextValue(value, true));
-              }
-              else
-              {
-                sql.AppendLine(SqlBuilder.FlatAutoComplete(index.TableName, datasetFilter, fieldNumber));
-                command.Parameters.AddWithValue($"term{fieldNumber}", term);
-              }
-            }
-            break;
-        }
-
-        if (!string.IsNullOrWhiteSpace(fieldData.LinkDomain))
-        {
-          command.Parameters.AddWithValue($"domain{fieldNumber}", fieldData.LinkDomain);
-        }
-      }
-
-      sql.AppendLine(") result");
-      sql.AppendLine(" group by term, [use] order by term");
-
       command.CommandText = sql.ToString();
       using var reader = await command.ExecuteReaderAsync(cancellationToken);
 
@@ -682,29 +696,157 @@ public partial class MSSqlRepository : IDDRepository
         }
       }
 
-      // IF we are doing autocomplete on a single enumerated field translate he keys to re requested value.
-      if (fields.Count() == 1 && firstField.Enumeration && language != null)
+      // If we are doing autocomplete on a single enumerated field translate he keys to re requested value.
+      if (fields.Count() == 1 && firstField.IsEnumeration && language != null)
       {
         foreach (var r in result)
         {
-          if (r.Term != null)
+          if (r.Term is not null)
           {
             r.Term = firstField.GetLanguageEnumValue(r.Term, language);
           }
         }
         result.Sort();
       }
-      result.Hits = counter;
       return result;
     }
-    catch (Exception)
+
+    return await GetResult();
+  }
+
+
+  public async Task<AutoCompleteResult?> GetAutoCompleteAsyncEx(IEnumerable<FieldData> fields, DatasetFilter? datasetFilter,
+                                                         string? value, int? startFrom, int? limit, string? language, bool count,
+                                                         CancellationToken cancellationToken)
+  {
+    var result = new AutoCompleteResult(startFrom ?? 1, limit ?? 10);
+
+    var firstField = fields.FirstOrDefault() ??
+      throw new DDException("No field(s) requested for autocomplete");
+    var databaseData = firstField.Database!;
+
+    using var connection = await GetDbConnectionAsync(databaseData) as SqlConnection
+      ?? throw new DDException("No database connection for autocomplete");
+
+    using var command = connection.CreateCommand();
+    var sql = new StringBuilder();
+    var returnRows = startFrom + limit + 1; // return one more than the requested number of keys
+
+    sql.AppendLine($"select top {returnRows} term, [use] , sum(hits) as hits from (");
+
+    var term = $"{value}%";
+    _ = int.TryParse(value, out int number);
+
+    int fieldNumber = 0;
+    foreach (var fieldData in fields)
     {
-      throw;
+      fieldNumber++;
+      if (fieldNumber > 1)
+      {
+        sql.AppendLine(" union ");
+      }
+
+      var index = fieldData.PreferredIndex ?? throw new IndexNotFoundException(fieldData.Name);
+      switch (index.Type)
+      {
+        case IndexTypeEnum.FreeText:
+          if (databaseData.IsFullTextEnabled)
+          {
+            sql.AppendLine(SqlBuilder.FullTextAutoComplete(databaseData.FullTextTable, value, fieldData.Tag, datasetFilter, fieldNumber));
+            command.Parameters.AddWithValue($"term{fieldNumber}", FullTextValue(value, true));
+          }
+          else
+          {
+            sql.AppendLine(SqlBuilder.FreeTextAutoComplete(index.TableName, datasetFilter, fieldNumber));
+            command.Parameters.AddWithValue($"term{fieldNumber}", term);
+          }
+          break;
+
+        case IndexTypeEnum.Integer:
+          if (fieldData.IsLinked)
+          {
+            sql.AppendLine(SqlBuilder.LinkedAutocomplete(fieldData, datasetFilter, fieldNumber, value));
+            if (fieldData.LinkedDatabase!.IsFullTextEnabled)
+            {
+              command.Parameters.AddWithValue($"term{fieldNumber}", FullTextValue(value, true));
+            }
+            else
+            {
+              command.Parameters.AddWithValue($"term{fieldNumber}", term);
+            }
+          }
+          else
+          {
+            sql.AppendLine(SqlBuilder.IntegerAutoComplete(index.TableName, datasetFilter, fieldNumber));
+            command.Parameters.AddWithValue($"term{fieldNumber}", number);
+          }
+          break;
+
+        default:
+          if (fieldData.IsEnumeration)
+          {
+            AutoCompleteEnum(command, sql, index.TableName, datasetFilter, fieldNumber, fieldData, value, language, count);
+          }
+          else
+          {
+            if (databaseData.IsFullTextEnabled)
+            {
+              sql.AppendLine(SqlBuilder.FullTextAutoComplete(databaseData.FullTextTable, value, fieldData.Tag, datasetFilter, fieldNumber));
+              command.Parameters.AddWithValue($"term{fieldNumber}", FullTextValue(value, true));
+            }
+            else
+            {
+              sql.AppendLine(SqlBuilder.FlatAutoComplete(index.TableName, datasetFilter, fieldNumber));
+              command.Parameters.AddWithValue($"term{fieldNumber}", term);
+            }
+          }
+          break;
+      }
+
+      if (!string.IsNullOrWhiteSpace(fieldData.LinkDomain))
+      {
+        command.Parameters.AddWithValue($"domain{fieldNumber}", fieldData.LinkDomain);
+      }
     }
-    finally
+
+    sql.AppendLine(") result");
+    sql.AppendLine(" group by term, [use] order by term");
+
+    command.CommandText = sql.ToString();
+    using var reader = await command.ExecuteReaderAsync(cancellationToken);
+
+    int counter = 0;
+    while (await reader.ReadAsync(cancellationToken))
     {
-      connection?.Dispose();
+      counter++;
+      if (startFrom > 0 && counter >= startFrom)
+      {
+        if (result.Count < limit)
+        {
+          result.Add(new AutoCompleteObject
+          {
+            Term = (await reader.GetFieldValueAsync<object>(0)).ToString(),
+            Use = await reader.GetFieldValueAsync<string>(1),
+            Hits = await reader.GetFieldValueAsync<int>(2)
+          });
+        }
+      }
     }
+
+    // If we are doing autocomplete on a single enumerated field translate he keys to re requested value.
+    if (fields.Count() == 1 && firstField.IsEnumeration && language != null)
+    {
+      foreach (var r in result)
+      {
+        if (r.Term is not null)
+        {
+          r.Term = firstField.GetLanguageEnumValue(r.Term, language);
+        }
+      }
+      result.Sort();
+    }
+    result.Hits = counter;
+    return result;
   }
 
   private static void AutoCompleteEnum(SqlCommand command, StringBuilder sql, string tableName,
@@ -731,12 +873,12 @@ public partial class MSSqlRepository : IDDRepository
     }
   }
 
-  public async Task<int> GetNewRecordIdAsync(IDbConnection connection, IDbTransaction transaction, DatabaseData databaseData, DatasetData? datasetData)
+  public async Task<int> GetNewRecordIdAsync(DatabaseData databaseData, DatasetData? datasetData, SqlStateInfo sqlState)
   {
     int min = datasetData != null ? datasetData.LowerLimit : 1;
     int max = datasetData != null ? datasetData.UpperLimit : int.MaxValue;
-    using var command = (SqlCommand)connection.CreateCommand();
-    command.Transaction = (SqlTransaction)transaction;
+    using var command = (SqlCommand)sqlState.Connection!.CreateCommand();
+    command.Transaction = (SqlTransaction)sqlState.Transaction!;
     command.CommandText = $"select max(priref) from {databaseData.Name} where priref between @min and @max";
     command.Parameters.AddRange([new SqlParameter("@min", min), new SqlParameter("@max", max)]);
 
@@ -752,13 +894,10 @@ public partial class MSSqlRepository : IDDRepository
   }
 
   public async Task WriteNewDataAsync(string table, int id, DateTime creation,
-                                      DateTime modification, string data,
-                                      IDbConnection connection,
-                                      IDbTransaction transaction,
-                                      CancellationToken cancellationToken)
+                                      DateTime modification, string data, SqlStateInfo sqlState)
   {
-    using var command = (SqlCommand)connection.CreateCommand();
-    command.Transaction = (SqlTransaction)transaction;
+    using var command = (SqlCommand)sqlState.Connection!.CreateCommand();
+    command.Transaction = (SqlTransaction)sqlState.Transaction!;
     command.CommandText = $"insert into [{table}] (priref, creation, modification, data)" +
                            "values (@priref, @creation, @modification, @data)";
     command.Parameters.AddRange(
@@ -768,14 +907,15 @@ public partial class MSSqlRepository : IDDRepository
         new SqlParameter("modification", modification),
         new SqlParameter("data", data)
       ]);
-    await command.ExecuteNonQueryAsync(cancellationToken);
+    await command.ExecuteNonQueryAsync(sqlState.CancellationToken);
   }
 
-  public async Task UpdateDataAsync(IDbConnection connection, IDbTransaction transaction, string table,
-                               int id, DateTime modification, string data, CancellationToken cancellationToken)
+  public async Task UpdateDataAsync(string table, int id, DateTime modification, string data, SqlStateInfo sqlState)
   {
-    using var command = (SqlCommand)connection.CreateCommand();
-    command.Transaction = (SqlTransaction)transaction;
+    var sqlConnection = (SqlConnection?)sqlState.Connection ?? throw new NullReferenceException(nameof(sqlState.Connection));
+    var sqlTransaction = (SqlTransaction?)sqlState.Transaction ?? throw new NullReferenceException(nameof(sqlState.Transaction));
+    using var command = sqlConnection.CreateCommand();
+    command.Transaction = sqlTransaction;
     command.CommandText = $"update [{table}] set modification = @modification, data = @data where priref = @priref";
     command.Parameters.AddRange(
       [
@@ -783,7 +923,7 @@ public partial class MSSqlRepository : IDDRepository
         new SqlParameter("modification", modification),
         new SqlParameter("data", data)
       ]);
-    await command.ExecuteNonQueryAsync(cancellationToken);
+    await command.ExecuteNonQueryAsync(sqlState.CancellationToken);
   }
 
   public async Task<IDbTransaction> StartTransactionAsync(IDbConnection connection)
@@ -792,130 +932,107 @@ public partial class MSSqlRepository : IDDRepository
     return await sqlConnection.BeginTransactionAsync();
   }
 
-  public async Task RollbackAsync(IDbTransaction transaction, CancellationToken cancellationToken) =>
-    await ((SqlTransaction)transaction).RollbackAsync(cancellationToken);
-
-  public async Task CommitAsync(IDbTransaction transaction, CancellationToken cancellationToken) =>
-    await ((SqlTransaction)transaction).CommitAsync(cancellationToken);
-
-  public async Task<int> AddIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, IntegerIndexRow row, CancellationToken cancellationToken)
+  public async Task RollbackAsync(SqlStateInfo sqlState)
   {
-    var sqlConnection = (SqlConnection)connection ?? throw new NullReferenceException(nameof(connection));
+    await ((SqlTransaction)sqlState.Transaction!).RollbackAsync(sqlState.CancellationToken);
+    sqlState.Transaction = null;
+  }
+
+  public async Task CommitAsync(SqlStateInfo sqlState)
+  {
+    await ((SqlTransaction)sqlState.Transaction!).CommitAsync(sqlState.CancellationToken);
+    sqlState.Transaction = null;
+  }
+
+  public async Task<int> AddIndexKeyAsync(IntegerIndexRow row, SqlStateInfo sqlState)
+  {
+    var sqlConnection = (SqlConnection)sqlState.Connection!;
     using var command = sqlConnection.CreateCommand();
-    command.Transaction = (SqlTransaction)transaction;
+    command.Transaction = (SqlTransaction)sqlState.Transaction!;
     command.CommandText = SqlBuilder.InsertKey(row.Table);
     command.Parameters.AddRange(
       [
         new SqlParameter("key", row.Term),
         new SqlParameter("id", row.Id)
       ]);
-    return await command.ExecuteNonQueryAsync(cancellationToken);
+    return await command.ExecuteNonQueryAsync(sqlState.CancellationToken);
   }
 
-  public async Task<int> DeleteIndexKeyAsync(IDbConnection connection, IDbTransaction transaction,
-                                   IntegerIndexRow row, CancellationToken cancellationToken)
+  public async Task<int> DeleteIndexKeyAsync(IntegerIndexRow row, SqlStateInfo sqlState)
   {
-    var sqlConnection = (SqlConnection)connection ?? throw new NullReferenceException(nameof(connection));
+    var sqlConnection = (SqlConnection)sqlState.Connection!;
     using var command = sqlConnection.CreateCommand();
-    command.Transaction = (SqlTransaction)transaction;
+    command.Transaction = (SqlTransaction)sqlState.Transaction!;
     command.CommandText = SqlBuilder.DeleteKey(row.Table);
     command.Parameters.AddRange(
       [
         new SqlParameter("key", row.Term),
         new SqlParameter("id", row.Id)
       ]);
-    return await command.ExecuteNonQueryAsync(cancellationToken);
+    return await command.ExecuteNonQueryAsync(sqlState.CancellationToken);
   }
 
-  public async Task<int> DeleteIndexKeyAsync(IDbConnection connection, IDbTransaction transaction,
-                                   string? fullTextTable, TermIndexRow row, CancellationToken cancellationToken)
+  public async Task<int> DeleteIndexKeyAsync(string? fullTextTable, TermIndexRow row, SqlStateInfo sqlState)
   {
-    var sqlConnection = (SqlConnection)connection ?? throw new NullReferenceException(nameof(connection));
-    var sqlTransaction = (SqlTransaction)transaction ?? throw new NullReferenceException(nameof(transaction));
-    var deletes = 0;
-    if (fullTextTable != null)
+    int deletes = 0;
+    if (fullTextTable is not null)
     {
-      deletes += await UpdateIndexTableAsync(sqlConnection, sqlTransaction, SqlBuilder.DeleteFullTextKey(fullTextTable, row.Domain), row, cancellationToken);
-      if (row!.Index!.Unique)
+      deletes += await UpdateIndexTableAsync(SqlBuilder.DeleteFullTextKey(fullTextTable, row.Domain), row, sqlState);
+      IndexData indexData = row.Index;
+      if (indexData.TableExists.HasValue && indexData.TableExists.Value)
       {
-        deletes += await UpdateIndexTableAsync(sqlConnection, sqlTransaction, SqlBuilder.DeleteTextKey(row.Table, row.Domain), row, cancellationToken);
+        deletes += await UpdateIndexTableAsync(SqlBuilder.DeleteTextKey(row.Table, row.Domain), row, sqlState);
       }
     }
     else
     {
-      deletes += await UpdateIndexTableAsync(sqlConnection, sqlTransaction, SqlBuilder.DeleteTextKey(row.Table, row.Domain), row, cancellationToken);
+      deletes += await UpdateIndexTableAsync(SqlBuilder.DeleteTextKey(row.Table, row.Domain), row, sqlState);
     }
     return deletes;
   }
 
-  public async Task<int> AddIndexKeyAsync(IDbConnection connection, IDbTransaction transaction,
-                                string? fullTextTable, TermIndexRow row, CancellationToken cancellationToken)
+  public async Task<int> AddIndexKeyAsync(string? fullTextTable, TermIndexRow row, SqlStateInfo sqlState)
   {
-    var sqlConnection = (SqlConnection)connection ?? throw new NullReferenceException(nameof(connection));
-    var sqlTransaction = (SqlTransaction)transaction ?? throw new NullReferenceException(nameof(transaction));
-    var inserts = 0;
-    if (fullTextTable != null)
+    int inserts = 0;
+    if (fullTextTable is not null)
     {
-      inserts += await UpdateIndexTableAsync(sqlConnection, sqlTransaction, SqlBuilder.InsertFullTextKey(fullTextTable), row, cancellationToken);
-      if (row!.Index!.Unique)
+      inserts += await UpdateIndexTableAsync(SqlBuilder.InsertFullTextKey(fullTextTable), row, sqlState);
+      IndexData indexData = row.Index;
+      if (indexData.TableExists.HasValue && indexData.TableExists.Value)
       {
-        inserts += await UpdateIndexTableAsync(sqlConnection, sqlTransaction, SqlBuilder.InsertTextKey(row.Table, row.Domain), row, cancellationToken);
+        inserts += await UpdateIndexTableAsync(SqlBuilder.InsertTextKey(row.Table, row.Domain), row, sqlState);
       }
     }
     else
     {
-      inserts += await UpdateIndexTableAsync(sqlConnection, sqlTransaction, SqlBuilder.InsertTextKey(row.Table, row.Domain), row, cancellationToken);
+      inserts += await UpdateIndexTableAsync(SqlBuilder.InsertTextKey(row.Table, row.Domain), row, sqlState);
     }
     return inserts;
   }
 
-  public async Task<int> AddIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, DateIndexRow row, CancellationToken cancellationToken)
-  {
-    var sqlConnection = (SqlConnection)connection ?? throw new NullReferenceException(nameof(connection));
-    var sqlTransaction = (SqlTransaction)transaction ?? throw new NullReferenceException(nameof(transaction));
-    return await UpdateDateIndexTableAsync(sqlConnection, sqlTransaction, SqlBuilder.InsertDateKey(row.Table), row, cancellationToken);
-  }
+  public Task<int> AddIndexKeyAsync(DateIndexRow row, SqlStateInfo sqlState)
+    => UpdateDateIndexTableAsync(SqlBuilder.InsertDateKey(row.Table), row, sqlState);
 
-  public async Task<int> AddIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, BooleanIndexRow row, CancellationToken cancellationToken)
-  {
-    var sqlConnection = (SqlConnection)connection ?? throw new NullReferenceException(nameof(connection));
-    var sqlTransaction = (SqlTransaction)transaction ?? throw new NullReferenceException(nameof(transaction));
-    return await UpdateBooleanIndexTableAsync(sqlConnection, sqlTransaction, SqlBuilder.InsertBooleanKey(row.Table), row, cancellationToken);
-  }
+  public Task<int> AddIndexKeyAsync(BooleanIndexRow row, SqlStateInfo sqlState)
+    => UpdateBooleanIndexTableAsync(SqlBuilder.InsertBooleanKey(row.Table), row, sqlState);
 
-  public async Task<int> DeleteIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, DateIndexRow row, CancellationToken cancellationToken)
-  {
-    var sqlConnection = (SqlConnection)connection ?? throw new NullReferenceException(nameof(connection));
-    var sqlTransaction = (SqlTransaction)transaction ?? throw new NullReferenceException(nameof(transaction));
-    return await UpdateDateIndexTableAsync(sqlConnection, sqlTransaction, SqlBuilder.DeleteDateKey(row.Table), row, cancellationToken);
-  }
+  public Task<int> DeleteIndexKeyAsync(DateIndexRow row, SqlStateInfo sqlState)
+    => UpdateDateIndexTableAsync(SqlBuilder.DeleteDateKey(row.Table), row, sqlState);
 
-  public async Task<int> AddIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, IsoDateIndexRow row, CancellationToken cancellationToken)
-  {
-    var sqlConnection = (SqlConnection)connection ?? throw new NullReferenceException(nameof(connection));
-    var sqlTransaction = (SqlTransaction)transaction ?? throw new NullReferenceException(nameof(transaction));
-    return await UpdateDateIndexTableAsync(sqlConnection, sqlTransaction, SqlBuilder.InsertIsoDateKey(row.Table), row, cancellationToken);
-  }
+  public Task<int> AddIndexKeyAsync(IsoDateIndexRow row, SqlStateInfo sqlState)
+   => UpdateDateIndexTableAsync(SqlBuilder.InsertIsoDateKey(row.Table), row, sqlState);
 
+  public Task<int> DeleteIndexKeyAsync(IsoDateIndexRow row, SqlStateInfo sqlState)
+    => UpdateDateIndexTableAsync(SqlBuilder.DeleteIsoDateKey(row.Table), row, sqlState);
 
-  public async Task<int> DeleteIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, IsoDateIndexRow row, CancellationToken cancellationToken)
-  {
-    var sqlConnection = (SqlConnection)connection ?? throw new NullReferenceException(nameof(connection));
-    var sqlTransaction = (SqlTransaction)transaction ?? throw new NullReferenceException(nameof(transaction));
-    return await UpdateDateIndexTableAsync(sqlConnection, sqlTransaction, SqlBuilder.DeleteIsoDateKey(row.Table), row, cancellationToken);
-  }
+  public Task<int> DeleteIndexKeyAsync(BooleanIndexRow row, SqlStateInfo sqlState)
+    => UpdateBooleanIndexTableAsync(SqlBuilder.DeleteBooleanKey(row.Table), row, sqlState);
 
-  public async Task<int> DeleteIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, BooleanIndexRow row, CancellationToken cancellationToken)
+  private static async Task<int> UpdateDateIndexTableAsync(string commandText, DateIndexRow row, SqlStateInfo sqlState)
   {
-    var sqlConnection = (SqlConnection)connection ?? throw new NullReferenceException(nameof(connection));
-    var sqlTransaction = (SqlTransaction)transaction ?? throw new NullReferenceException(nameof(transaction));
-    return await UpdateBooleanIndexTableAsync(sqlConnection, sqlTransaction, SqlBuilder.DeleteBooleanKey(row.Table), row, cancellationToken);
-  }
-
-  private static async Task<int> UpdateDateIndexTableAsync(SqlConnection connection, SqlTransaction transaction, string commandText, DateIndexRow row, CancellationToken cancellationToken)
-  {
-    using var command = connection.CreateCommand();
-    command.Transaction = transaction;
+    var sqlConnection = (SqlConnection)sqlState.Connection!;
+    using var command = sqlConnection.CreateCommand();
+    command.Transaction = (SqlTransaction)sqlState.Transaction!;
     command.CommandText = commandText;
     command.Parameters.AddRange(
       [
@@ -923,13 +1040,14 @@ public partial class MSSqlRepository : IDDRepository
         new SqlParameter("displayTerm", row.DisplayTerm),
         new SqlParameter("id", row.Id)
       ]);
-    return await command.ExecuteNonQueryAsync(cancellationToken);
+    return await command.ExecuteNonQueryAsync(sqlState.CancellationToken);
   }
 
-  private static async Task<int> UpdateBooleanIndexTableAsync(SqlConnection connection, SqlTransaction transaction, string commandText, BooleanIndexRow row, CancellationToken cancellationToken)
+  private static async Task<int> UpdateBooleanIndexTableAsync(string commandText, BooleanIndexRow row, SqlStateInfo sqlState)
   {
-    using var command = connection.CreateCommand();
-    command.Transaction = transaction;
+    var sqlConnection = (SqlConnection)sqlState.Connection!;
+    using var command = sqlConnection.CreateCommand();
+    command.Transaction = (SqlTransaction)sqlState.Transaction!;
     command.CommandText = commandText;
     command.Parameters.AddRange(
       [
@@ -937,14 +1055,14 @@ public partial class MSSqlRepository : IDDRepository
         new SqlParameter("displayTerm", row.DisplayTerm),
         new SqlParameter("id", row.Id)
       ]);
-    return await command.ExecuteNonQueryAsync(cancellationToken);
+    return await command.ExecuteNonQueryAsync(sqlState.CancellationToken);
   }
 
-  private static async Task<int> UpdateIndexTableAsync(SqlConnection connection, SqlTransaction transaction, string commandText,
-                                             TermIndexRow row, CancellationToken cancellationToken)
+  private static async Task<int> UpdateIndexTableAsync(string commandText, TermIndexRow row, SqlStateInfo sqlState)
   {
+    var connection = (SqlConnection)sqlState.Connection!;
     using var command = connection.CreateCommand();
-    command.Transaction = transaction;
+    command.Transaction = (SqlTransaction)sqlState.Transaction!;
     command.CommandText = commandText;
     command.Parameters.AddRange(
       [
@@ -957,20 +1075,23 @@ public partial class MSSqlRepository : IDDRepository
         new SqlParameter("language", row.Language != null ? row.Language : DBNull.Value),
         new SqlParameter("id", row.Id)
       ]);
-    return await command.ExecuteNonQueryAsync(cancellationToken);
+    return await command.ExecuteNonQueryAsync(sqlState.CancellationToken);
   }
 
-  public async Task<List<int>> ReadLinkedRecordIdsAsync(IDbConnection connection, IDbTransaction transaction, string tableName, int id, CancellationToken cancellationToken)
+  public async Task<List<int>> ReadLinkedRecordIdsAsync(string tableName, int id, SqlStateInfo sqlState)
   {
     var result = new List<int>();
-    using var command = ((SqlConnection)connection).CreateCommand();
-    command.Transaction = (SqlTransaction)transaction;
+    var connection = (SqlConnection)sqlState.Connection!;
+    var transaction = (SqlTransaction)sqlState.Transaction!;
+
+    using var command = connection.CreateCommand();
+    command.Transaction = transaction;
     command.Parameters.Add(new SqlParameter("id", id));
     command.CommandText = SqlBuilder.ReadLinkedRecords(tableName);
     try
     {
-      using var reader = await command.ExecuteReaderAsync(cancellationToken);
-      while (await reader.ReadAsync(cancellationToken))
+      using var reader = await command.ExecuteReaderAsync(sqlState.CancellationToken);
+      while (await reader.ReadAsync(sqlState.CancellationToken))
       {
         result.Add(reader.GetInt32(0));
       }
@@ -986,14 +1107,15 @@ public partial class MSSqlRepository : IDDRepository
     return result;
   }
 
-  public async Task<int> DeleteIndexKeysAsync(IDbConnection connection, IDbTransaction transaction,
-                              string tableName, int id, CancellationToken cancellationToken)
+  public async Task<int> DeleteIndexKeysAsync(string tableName, int id, SqlStateInfo sqlState)
   {
-    using var command = ((SqlConnection)connection).CreateCommand();
-    command.Transaction = (SqlTransaction)transaction;
+    var sqlConnection = (SqlConnection)sqlState.Connection!;
+    var sqlTransaction = (SqlTransaction)sqlState.Transaction!;
+    using var command = sqlConnection.CreateCommand();
+    command.Transaction = sqlTransaction;
     command.Parameters.Add(new SqlParameter("id", id));
     command.CommandText = SqlBuilder.DeleteIndexKeys(tableName);
-    return await command.ExecuteNonQueryAsync(cancellationToken);
+    return await command.ExecuteNonQueryAsync(sqlState.CancellationToken);
   }
 
   public static async Task<bool> TableExists(IDbConnection connection, string tableName)
@@ -1015,173 +1137,177 @@ public partial class MSSqlRepository : IDDRepository
   /// <param name="cancellationToken"></param>
   /// <returns></returns>
   /// <exception cref="NullReferenceException"></exception>
-  public async Task<int> AddIndexKey(IDbConnection connection, IDbTransaction transaction, string? fullTextTable,
-                                     AlphaNumericIndexRow row, CancellationToken cancellationToken)
+  public async Task<int> AddIndexKeyAsync(string? fullTextTable, AlphaNumericIndexRow row, SqlStateInfo sqlState)
   {
-    var sqlConnection = (SqlConnection)connection ?? throw new NullReferenceException(nameof(connection));
-    var sqlTransaction = (SqlTransaction)transaction ?? throw new NullReferenceException(nameof(transaction));
-    int inserts = await UpdateIndexTable(sqlConnection, sqlTransaction, SqlBuilder.InsertAlphanumericKey(row.Table), row, cancellationToken);
+    int inserts = await UpdateIndexTableAsync(SqlBuilder.InsertAlphanumericKey(row.Table), row, sqlState);
     if (fullTextTable != null)
     {
       if (row.Index != null && row.Tag != null && row.DisplayTerm != null)
       {
         var indexRow = new TermIndexRow(row.Index, row.Tag, row.Occ, row.DisplayTerm, row.Id);
-        inserts += await UpdateIndexTableAsync(sqlConnection, sqlTransaction, SqlBuilder.InsertFullTextKey(fullTextTable), indexRow, cancellationToken);
+        inserts += await UpdateIndexTableAsync(SqlBuilder.InsertFullTextKey(fullTextTable), indexRow, sqlState);
       }
     }
     return inserts;
   }
 
-  private static async Task<int> UpdateIndexTable(SqlConnection connection, SqlTransaction transaction, string commandText,
-                                            AlphaNumericIndexRow row, CancellationToken cancellationToken)
+  private static async Task<int> UpdateIndexTableAsync(string commandText, IndexRow indexRow, SqlStateInfo sqlState)
   {
-    using var command = connection.CreateCommand();
-    command.Transaction = transaction;
-    command.CommandText = commandText;
-    command.Parameters.AddRange(
-      [
-        new SqlParameter("tag", row.Tag),
-        new SqlParameter("occ", row.Occ),
-        new SqlParameter("key", row.Term),
-        new SqlParameter("displayTerm", row.DisplayTerm),
-        new SqlParameter("id", row.Id)
-      ]);
-    return await command.ExecuteNonQueryAsync(cancellationToken);
+    try
+    {
+      using var command = ((SqlConnection)sqlState.Connection!).CreateCommand();
+      command.Transaction = (SqlTransaction)sqlState.Transaction!;
+      command.CommandText = commandText;
+      command.Parameters.AddRange(
+        [
+          new SqlParameter("tag", indexRow.Tag),
+        new SqlParameter("occ", indexRow.Occ),
+        new SqlParameter("key", indexRow.Term),
+        new SqlParameter("displayTerm", indexRow.DisplayTerm),
+        new SqlParameter("id", indexRow.Id)
+        ]);
+      return await command.ExecuteNonQueryAsync(sqlState.CancellationToken);
+    }
+    catch (Exception ex)
+    {
+      throw;
+    }
   }
 
-  public async Task<int> DeleteIndexKey(IDbConnection connection, IDbTransaction transaction, string? fullTextTable,
-                                  AlphaNumericIndexRow alphaNumericRow, CancellationToken cancellationToken)
+  public async Task<int> DeleteIndexKeyAsync(string? fullTextTable, AlphaNumericIndexRow alphaNumericRow, SqlStateInfo sqlState)
   {
-    var sqlConnection = (SqlConnection)connection ?? throw new NullReferenceException(nameof(connection));
-    var sqlTransaction = (SqlTransaction)transaction ?? throw new NullReferenceException(nameof(transaction));
-    int deletes = await UpdateIndexTable(sqlConnection, sqlTransaction, SqlBuilder.DeleteAlphaNumericKey(alphaNumericRow.Table), alphaNumericRow, cancellationToken);
-    if (fullTextTable != null)
+    int deletes = await UpdateIndexTableAsync(SqlBuilder.DeleteAlphaNumericKey(alphaNumericRow.Table), alphaNumericRow, sqlState);
+    if (fullTextTable is not null)
     {
-      deletes += await UpdateIndexTable(sqlConnection, sqlTransaction, SqlBuilder.DeleteFullTextKey(fullTextTable), alphaNumericRow, cancellationToken);
+      deletes += await UpdateIndexTableAsync(SqlBuilder.DeleteFullTextKey(fullTextTable), alphaNumericRow, sqlState);
     }
     return deletes;
   }
 
-  public static async Task<int> WriteRecordSetMetaDataAsync(RecordSetMetaData metaData, IDbConnection connection, IDbTransaction transaction, CancellationToken cancellationToken)
+  public async Task<int> WriteRecordSetMetaDataAsync(RecordSetMetaData metaData, SqlStateInfo sqlState)
   {
-    string sql;
-    if (metaData.Number == 0 || !await CheckIfRecordSetExists(metaData.Database!, metaData.Number, connection, transaction, cancellationToken))
+    static async Task<bool> CheckIfRecordSetExists(string database, int number, SqlStateInfo sqlState)
     {
-      metaData.Number = await GetNewRecordSetNumber(metaData.Database!, connection, transaction, cancellationToken);
+      var sqlConnection = (SqlConnection)sqlState.Connection! ?? throw new NullReferenceException(nameof(sqlState.Connection));
+      var sqlTransaction = (SqlTransaction)sqlState.Transaction! ?? throw new NullReferenceException(nameof(sqlState.Transaction));
+      var command = sqlConnection.CreateCommand();
+      command.Transaction = sqlTransaction;
+      command.CommandText = SqlBuilder.ExistsSetNumber(database);
+      command.Parameters.AddWithValue("number", number);
+      return (int)await command.ExecuteScalarAsync(sqlState.CancellationToken) == 1;
+    }
+
+    static async Task<int> GetNewRecordSetNumber(string database, SqlStateInfo sqlState)
+    {
+      var sqlConnection = (SqlConnection)sqlState.Connection! ?? throw new NullReferenceException(nameof(sqlState.Connection));
+      var sqlTransaction = (SqlTransaction)sqlState.Transaction! ?? throw new NullReferenceException(nameof(sqlState.Transaction));
+      var command = sqlConnection.CreateCommand();
+      command.Transaction = sqlTransaction;
+      command.CommandText = SqlBuilder.GetNewSetNumber(database);
+      return (int)await command.ExecuteScalarAsync(sqlState.CancellationToken);
+    }
+
+    static async Task WriteRecordSetMetaDataAsync(RecordSetMetaData metaData, string sql, SqlStateInfo sqlState)
+    {
+      var sqlConnection = (SqlConnection)sqlState.Connection! ?? throw new NullReferenceException(nameof(sqlState.Connection));
+      var sqlTransaction = (SqlTransaction)sqlState.Transaction! ?? throw new NullReferenceException(nameof(sqlState.Transaction));
+      var command = sqlConnection.CreateCommand();
+      command.Transaction = sqlTransaction;
+      command.CommandText = sql;
+
+      command.Parameters.AddWithValue("number", metaData.Number);
+      command.Parameters.AddWithValue("title", metaData.Title);
+      command.Parameters.AddWithValue("selection", metaData.Selection);
+      command.Parameters.AddWithValue("modification", metaData.Modified == DateTime.MinValue ? DateTime.Now : metaData.Modified);
+      command.Parameters.AddWithValue("hitcount", metaData.Hits);
+      command.Parameters.AddWithValue("creation", metaData.Created);
+      command.Parameters.AddWithValue("owner", metaData.Owner);
+
+      await command.ExecuteNonQueryAsync(sqlState.CancellationToken);
+    }
+
+    string sql;
+    if (metaData.Number == 0 || !await CheckIfRecordSetExists(metaData.Database!, metaData.Number, sqlState))
+    {
+      metaData.Number = await GetNewRecordSetNumber(metaData.Database!, sqlState);
       sql = SqlBuilder.CreateRecordSet(metaData.Database!);
     }
     else
     {
       sql = SqlBuilder.UpdateRecordSet(metaData.Database!);
     }
-    await WriteRecordSetMetaDataAsync(metaData, sql, connection, transaction, cancellationToken);
+    await WriteRecordSetMetaDataAsync(metaData, sql, sqlState);
     return metaData.Number;
   }
 
-  private static async Task WriteRecordSetMetaDataAsync(RecordSetMetaData metaData, string sql, IDbConnection connection, IDbTransaction transaction, CancellationToken cancellationToken)
+  public static Task ClearRecordSetHitsAsync(string database, int setNo, SqlStateInfo sqlState)
+    => Clear(SqlBuilder.ClearRecordSetHits(database), setNo, sqlState);
+
+  public static Task ClearRecordSetAccessAsync(string database, int setNo, SqlStateInfo sqlState)
+   => Clear(SqlBuilder.ClearRecordSetAccess(database), setNo, sqlState);
+
+  public static Task ClearRecordSetEmailsAsync(string database, int setNo, SqlStateInfo sqlState)
+  => Clear(SqlBuilder.ClearRecordSetEmails(database), setNo, sqlState);
+
+  private static Task ClearRecordSetMetaData(string database, int setNo, SqlStateInfo sqlState)
+  => Clear(SqlBuilder.ClearRecordSetMetaData(database), setNo, sqlState);
+
+  private static async Task Clear(string commandText, int number, SqlStateInfo sqlState)
   {
-    var sqlConnection = (SqlConnection)connection ?? throw new NullReferenceException(nameof(connection));
-    var sqlTransaction = (SqlTransaction)transaction ?? throw new NullReferenceException(nameof(transaction));
-    var command = sqlConnection.CreateCommand();
-    command.Transaction = sqlTransaction;
-    command.CommandText = sql;
-
-    command.Parameters.AddWithValue("number", metaData.Number);
-    command.Parameters.AddWithValue("title", metaData.Title);
-    command.Parameters.AddWithValue("selection", metaData.Selection);
-    command.Parameters.AddWithValue("modification", metaData.Modified == DateTime.MinValue ? DateTime.Now : metaData.Modified);
-    command.Parameters.AddWithValue("hitcount", metaData.Hits);
-    command.Parameters.AddWithValue("creation", metaData.Created);
-    command.Parameters.AddWithValue("owner", metaData.Owner);
-
-    await command.ExecuteNonQueryAsync(cancellationToken);
-  }
-
-  private static async Task<bool> CheckIfRecordSetExists(string database, int number, IDbConnection connection, IDbTransaction transaction, CancellationToken cancellationToken)
-  {
-    var sqlConnection = (SqlConnection)connection ?? throw new NullReferenceException(nameof(connection));
-    var sqlTransaction = (SqlTransaction)transaction ?? throw new NullReferenceException(nameof(transaction));
-    var command = sqlConnection.CreateCommand();
-    command.Transaction = sqlTransaction;
-    command.CommandText = SqlBuilder.ExistsSetNumber(database);
-    command.Parameters.AddWithValue("number", number);
-    return (int)await command.ExecuteScalarAsync(cancellationToken) == 1;
-  }
-
-  private static async Task<int> GetNewRecordSetNumber(string database, IDbConnection connection, IDbTransaction transaction, CancellationToken cancellationToken)
-  {
-    var sqlConnection = (SqlConnection)connection ?? throw new NullReferenceException(nameof(connection));
-    var sqlTransaction = (SqlTransaction)transaction ?? throw new NullReferenceException(nameof(transaction));
-    var command = sqlConnection.CreateCommand();
-    command.Transaction = sqlTransaction;
-    command.CommandText = SqlBuilder.GetNewSetNumber(database);
-    return (int)await command.ExecuteScalarAsync(cancellationToken);
-  }
-
-  public static Task ClearRecordSetHitsAsync(string database, int setNo,
-                                             IDbConnection connection, IDbTransaction transaction, CancellationToken cancellationToken)
-    => Clear(SqlBuilder.ClearRecordSetHits(database), setNo, connection, transaction, cancellationToken);
-
-  public static Task ClearRecordSetAccessAsync(string database, int setNo,
-                                               IDbConnection connection, IDbTransaction transaction, CancellationToken cancellationToken)
-   => Clear(SqlBuilder.ClearRecordSetAccess(database), setNo, connection, transaction, cancellationToken);
-
-  public static Task ClearRecordSetEmailsAsync(string database, int setNo,
-                                               IDbConnection connection, IDbTransaction transaction, CancellationToken cancellationToken)
-  => Clear(SqlBuilder.ClearRecordSetEmails(database), setNo, connection, transaction, cancellationToken);
-
-  private static Task ClearRecordSetMetaData(string database, int setNo,
-                                             IDbConnection connection, IDbTransaction transaction, CancellationToken cancellationToken)
-  => Clear(SqlBuilder.ClearRecordSetMetaData(database), setNo, connection, transaction, cancellationToken);
-
-  private static async Task Clear(string commandText, int number, IDbConnection connection, IDbTransaction transaction, CancellationToken cancellationToken)
-  {
-    var sqlConnection = (SqlConnection)connection ?? throw new NullReferenceException(nameof(connection));
-    var sqlTransaction = (SqlTransaction)transaction ?? throw new NullReferenceException(nameof(transaction));
+    var sqlConnection = (SqlConnection)sqlState.Connection!;
+    var sqlTransaction = (SqlTransaction)sqlState.Transaction!;
     var command = sqlConnection.CreateCommand();
     command.Transaction = sqlTransaction;
     command.CommandText = commandText;
     command.Parameters.AddWithValue("number", number);
-    await command.ExecuteNonQueryAsync(cancellationToken);
+    await command.ExecuteNonQueryAsync(sqlState.CancellationToken);
   }
 
-  public static async Task WriteHitsAsync(RecordSetMetaData metaData, ResultSet set, IDbConnection connection, IDbTransaction transaction, CancellationToken cancellationToken)
+  public async Task<int> WriteRecordSetAsync(string folder, RecordSetMetaData metaData, ResultSet set, CancellationToken cancellationToken)
   {
-    var sqlConnection = (SqlConnection)connection ?? throw new NullReferenceException(nameof(connection));
-    var sqlTransaction = (SqlTransaction)transaction ?? throw new NullReferenceException(nameof(transaction));
-    var command = sqlConnection.CreateCommand();
-    command.Transaction = sqlTransaction;
-    command.CommandText = SqlBuilder.WriteRecordSetHits(metaData.Database);
-    foreach (var id in set.Ids)
+    static async Task WriteHitsAsync(RecordSetMetaData metaData, ResultSet set, SqlStateInfo sqlState)
     {
-      command.Parameters.Clear();
-      command.Parameters.AddWithValue("number", metaData.Number);
-      command.Parameters.AddWithValue("id", id);
-      await command.ExecuteNonQueryAsync(cancellationToken);
+      var sqlConnection = (SqlConnection)sqlState.Connection!;
+      var sqlTransaction = (SqlTransaction)sqlState.Transaction!;
+      var command = sqlConnection.CreateCommand();
+      command.Transaction = sqlTransaction;
+      command.CommandText = SqlBuilder.WriteRecordSetHits(metaData.Database);
+      foreach (var id in set.Ids)
+      {
+        command.Parameters.Clear();
+        command.Parameters.AddWithValue("number", metaData.Number);
+        command.Parameters.AddWithValue("id", id);
+        await command.ExecuteNonQueryAsync(sqlState.CancellationToken);
+      }
     }
-  }
 
-  public async Task<int> WriteRecordSetAsync(string folder, RecordSetMetaData metaData, ResultSet set, CancellationToken cancellationToken = default)
-  {
-    var database = metaData.Database!;
     var setNo = metaData.Number;
-    var databaseData = MetaDataCache.ReadDatabase(folder, metaData.Database!) ?? throw new DatabaseNotFoundException(folder, database);
+    var databaseData = MetaDataCache.ReadDatabase(folder, metaData.Database!) ?? throw new DatabaseNotFoundException(folder, metaData.Database);
     var connection = await GetDbConnectionAsync(databaseData);
     var transaction = await StartTransactionAsync(connection);
+
+    var sqlState = new SqlStateInfo
+    {
+      Connection = connection,
+      Transaction = transaction,
+      CancellationToken = cancellationToken
+    };
+
     try
     {
       metaData.Hits = set.Ids.Count;
-      int number = await WriteRecordSetMetaDataAsync(metaData, connection, transaction, cancellationToken);
-      await ClearRecordSetHitsAsync(database, setNo, connection, transaction, cancellationToken);
-      await ClearRecordSetAccessAsync(database, setNo, connection, transaction, cancellationToken);
-      await ClearRecordSetEmailsAsync(database, setNo, connection, transaction, cancellationToken);
-      await WriteHitsAsync(metaData, set, connection, transaction, cancellationToken);
-      await CommitAsync(transaction, cancellationToken);
+      var table = databaseData.Name!;
+      int number = await WriteRecordSetMetaDataAsync(metaData, sqlState);
+      await ClearRecordSetHitsAsync(table, setNo, sqlState);
+      await ClearRecordSetAccessAsync(table, setNo, sqlState);
+      await ClearRecordSetEmailsAsync(table, setNo, sqlState);
+      await WriteHitsAsync(metaData, set, sqlState);
+      await CommitAsync(sqlState);
       return number;
     }
     catch
     {
-      await RollbackAsync(transaction, cancellationToken);
+      await RollbackAsync(sqlState);
       throw;
     }
   }
@@ -1189,143 +1315,96 @@ public partial class MSSqlRepository : IDDRepository
   public async Task DeleteRecordSetAsync(string folder, string database, int setNo, CancellationToken cancellationToken)
   {
     var databaseData = MetaDataCache.ReadDatabase(folder, database) ?? throw new DatabaseNotFoundException(folder, database);
-    using var connection = await GetDbConnectionAsync(databaseData);
+    var connection = await GetDbConnectionAsync(databaseData);
     var transaction = await StartTransactionAsync(connection);
+
+    var sqlState = new SqlStateInfo
+    {
+      Connection = connection,
+      Transaction = transaction,
+      CancellationToken = cancellationToken
+    };
+
     try
     {
-      await ClearRecordSetMetaData(database, setNo, connection, transaction, cancellationToken);
-      await ClearRecordSetHitsAsync(database, setNo, connection, transaction, cancellationToken);
-      await ClearRecordSetAccessAsync(database, setNo, connection, transaction, cancellationToken);
-      await ClearRecordSetEmailsAsync(database, setNo, connection, transaction, cancellationToken);
-      await CommitAsync(transaction, cancellationToken);
+      await ClearRecordSetMetaData(database, setNo, sqlState);
+      await ClearRecordSetHitsAsync(database, setNo, sqlState);
+      await ClearRecordSetAccessAsync(database, setNo, sqlState);
+      await ClearRecordSetEmailsAsync(database, setNo, sqlState);
+      await CommitAsync(sqlState);
     }
     catch
     {
-      await RollbackAsync(transaction, cancellationToken);
+      await RollbackAsync(sqlState);
     }
   }
 
-  public async Task<List<HierarchyNode>> SearchLocationsAsync(DatabaseData locations, string nameField, string barcodeField, string value, SearchLimits limits)
-  {
-    var result = new List<HierarchyNode>();
-    using var connection = (SqlConnection)await GetDbConnectionAsync(locations);
-    await SearchByBarcode(connection, locations, barcodeField, value, limits, result);
-    if (limits.Count < limits.Limit)
-    {
-      await SearchByLocationCode(connection, locations, nameField, value, limits, result);
-    }
-    return result;
-  }
-
-  private async Task SearchByBarcode(SqlConnection connection, DatabaseData locations, string barcodeField, string value, SearchLimits limits, List<HierarchyNode> result)
-  {
-    var barcodeFieldData = locations.FindFieldByTagOrName(barcodeField) ??
-    throw new FieldNotFoundException(barcodeField, locations.Name);
-    var barcodeTable = barcodeFieldData.GetIndexTableName();
-    using var command = connection.CreateCommand();
-    command.CommandText = $"select priref, displayTerm from {barcodeTable} where term like @term";
-    command.Parameters.AddWithValue("term", value + "%");
-    using var reader = await command.ExecuteReaderAsync();
-    while (reader.Read() && limits.Count < limits.Limit)
-    {
-      var node = new HierarchyNode
-      {
-        Id = reader.GetInt32(0),
-        Key = reader.GetString(1),
-        Match = true
-      };
-
-      limits.Count++;
-      result.Add(node);
-    }
-  }
-
-  private async static Task SearchByLocationCode(SqlConnection connection, DatabaseData locations, string nameField, string value, SearchLimits limits, List<HierarchyNode> result)
-  {
-    var nameFieldData = locations.FindFieldByTagOrName(nameField) ??
-      throw new FieldNotFoundException(nameField, locations.Name);
-    var nameTable = nameFieldData.GetIndexTableName();
-    var partsOfField = nameFieldData.GetPartsOfField();
-    var partsOfTable = partsOfField?.GetIndexTableName();
-    var parts = value.Split([' ', '\\', '/', '-'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-    int level = 0;
-    using var command = connection.CreateCommand();
-    command.CommandText = $"select priref, displayTerm from {nameTable} where term like @term and priref not in (select priref from {partsOfTable})";
-    command.Parameters.AddWithValue("term", parts[0] + "%");
-
-    using var reader = await command.ExecuteReaderAsync();
-
-    while (await reader.ReadAsync() && limits.Count < limits.Limit)
-    {
-      var node = new HierarchyNode
-      {
-        Id = reader.GetInt32(0),
-        Key = reader.GetString(1),
-        Children = await GetChildren(connection, partsOfTable!, reader.GetInt32(0), nameTable, parts, level + 1, limits),
-        Match = parts.Length <= level + 1
-      };
-
-      if (node.Match)
-      {
-        limits.Count++;
-      }
-      result.Add(node);
-    }
-  }
 
   private static async Task<List<HierarchyNode>> GetChildren(SqlConnection connection, string partOfTable, int id, string nameTable,
-                                                             string[] parts, int level, SearchLimits limits)
+                                                             string[] parts, int level)
   {
-    var key = level < parts.Length ? parts[level] : string.Empty;
+    var key = level < parts.Length ? parts[level] : "";
 
     using var command = connection.CreateCommand();
 
     command.CommandText = $"""
-      select [{partOfTable}].[priref], [{nameTable}].[displayterm] from [{partOfTable}] inner join [{nameTable}] on [{partOfTable}].[priref] = [{nameTable}].[priref]
-      where [{partOfTable}].[term] = @id
-      """;
+          select [{partOfTable}].[priref], [{nameTable}].[displayterm] from [{partOfTable}] inner join [{nameTable}] on [{partOfTable}].[priref] = [{nameTable}].[priref]
+          where [{partOfTable}].[term] = @id
+          """;
 
     command.Parameters.AddWithValue("id", id);
 
-    if (key != string.Empty)
+    if (key != "")
     {
-      command.CommandText += $" and [{nameTable}].[term] like @term";
-      command.Parameters.AddWithValue("term", parts[level] + "%");
+      command.CommandText += $" and [{nameTable}].[term] = @term";
+      command.Parameters.AddWithValue("term", parts[level]);
     }
 
-    var result = new List<HierarchyNode>();
-    using var partsReader = await command.ExecuteReaderAsync();
-
-    while (await partsReader.ReadAsync() && limits.Count < limits.Limit)
+    var children = new List<HierarchyNode>();
+    using (var reader = await command.ExecuteReaderAsync())
     {
-      var node = (new HierarchyNode
+      while (await reader.ReadAsync())
       {
-        Id = partsReader.GetInt32(0),
-        Key = partsReader.GetString(1),
-        Children = await GetChildren(connection, partOfTable, partsReader.GetInt32(0), nameTable, parts, level + 1, limits),
-        Match = parts.Length <= level + 1
-      });
-
-      if (node.Match)
-      {
-        limits.Count++;
+        var childKey = reader.GetString(1);
+        children.Add(new HierarchyNode
+        {
+          Id = reader.GetInt32(0),
+          Key = reader.GetString(1)
+        });
       }
-      result.Add(node);
     }
 
-    return result;
+    foreach (var child in children)
+    {
+      child.Children = await GetChildren(connection, partOfTable, child.Id, nameTable, parts, level + 1);
+    }
+    return children;
   }
 
-  public Task<IEnumerable<int>> SearchLinksAsync(DatabaseData database, DatasetData? dataset, FieldData field, string searchValue, string domain, SearchLimits limits)
-      => SearchLinksDomainAsync(database, dataset, field.LinkedFieldData!, searchValue, domain, limits);
+  public Task<IEnumerable<int>> SearchLinksAsync(DatabaseData database, DatasetData? dataset, FieldData field, string searchValue,
+                                                 string domain, SearchLimits limits, SqlStateInfo sqlState)
+      => SearchLinksDomainAsync(database, dataset, field.LinkedFieldData!, searchValue, domain, limits, sqlState);
 
   private async Task<IEnumerable<int>> SearchLinksDomainAsync(DatabaseData linkedDatabase, DatasetData? linkedDataset, FieldData linkedField,
-                                       string searchValue, string domain, SearchLimits limits)
+                                       string searchValue, string domain, SearchLimits limits, SqlStateInfo sqlState)
   {
-    var table = linkedField.GetIndexTableName();
+    var table = linkedDatabase.IsFullTextEnabled ? linkedDatabase.FullTextTable : linkedField.GetIndexTableName();
+
     using var connection = (SqlConnection)await GetDbConnectionAsync(linkedDatabase);
     using var command = connection.CreateCommand();
-    command.CommandText = $"select priref from {table} where term like @term and domain = @domain";
+    command.CommandText = $"select priref from {table} where term like @term ";
+
+    if (linkedDatabase.IsFullTextEnabled)
+    {
+      command.CommandText += " and tag = @tag";
+      command.Parameters.AddWithValue("tag", linkedField.Tag);
+    }
+
+    if (!string.IsNullOrEmpty(domain))
+    {
+      command.CommandText += " and domain = @domain";
+      command.Parameters.AddWithValue("domain", domain);
+    }
     if (linkedDataset != null)
     {
       command.CommandText += " and priref between @lowerLimit and @upperLimit";
@@ -1334,11 +1413,10 @@ public partial class MSSqlRepository : IDDRepository
     }
 
     command.Parameters.AddWithValue("term", searchValue + "%");
-    command.Parameters.AddWithValue("domain", domain ?? string.Empty);
-    using var reader = await command.ExecuteReaderAsync();
+    using var reader = await command.ExecuteReaderAsync(sqlState.CancellationToken);
     var ids = new List<int>();
     int count = 0;
-    while (reader.Read())
+    while (await reader.ReadAsync())
     {
       count++;
       if (count >= limits.StartFrom)
@@ -1353,11 +1431,12 @@ public partial class MSSqlRepository : IDDRepository
     return ids;
   }
 
-  public async Task<string> GetAutoNumberValue(IDbConnection connection, IDbTransaction transaction,
-                                   FieldData fieldData, CancellationToken cancellationToken)
+  public async Task<string> GetAutoNumberValue(FieldData fieldData, SqlStateInfo sqlState)
   {
-    using var command = ((SqlConnection)connection).CreateCommand();
-    command.Transaction = (SqlTransaction)transaction;
+    var connection = (SqlConnection)sqlState.Connection!;
+    var transaction = (SqlTransaction)sqlState.Transaction!;
+    using var command = connection.CreateCommand();
+    command.Transaction = transaction;
     command.CommandText = SqlBuilder.GetAutoNumberValue();
     command.Parameters.AddWithValue("databaseName", fieldData.Database!.Name!);
     command.Parameters.AddWithValue("tag", fieldData.Tag);
@@ -1365,13 +1444,89 @@ public partial class MSSqlRepository : IDDRepository
     command.Parameters.AddWithValue("minimum", fieldData.AutoNumberStartValue);
     command.Parameters.AddWithValue("prefix", fieldData.AutoNumberPrefix);
     command.Parameters.AddWithValue("suffix", fieldData.AutoNumberSuffix);
-    var result = await command.ExecuteScalarAsync(cancellationToken);
+    var result = await command.ExecuteScalarAsync(sqlState.CancellationToken);
     if (result == null || result == DBNull.Value)
     {
       throw new DDException($"Could not retrieve auto number value for field '{fieldData.Tag}' in database '{fieldData.Database.Name}'");
     }
     return result.ToString()
       ?? throw new DDException($"Could not convert auto number value for field '{fieldData.Tag}' in database '{fieldData.Database.Name}' to string");
+  }
+
+  public async Task<RecordSetMetaData?> GetResultSetMetaDataAsync(DatabaseData database, int set,
+    CancellationToken cancellationToken)
+  {
+    var table = database.Name!;
+    var connection = await GetDbConnectionAsync(database);
+
+    using var command = connection.CreateCommand() as SqlCommand;
+    command!.CommandText = SqlBuilder.GetSetMetaData(table);
+    command.Parameters.AddWithValue("number", set);
+    using var reader = await command.ExecuteReaderAsync(cancellationToken);
+    var metadata = (await reader.ReadAsync(cancellationToken)) ? new RecordSetMetaData(table, reader) : null;
+
+    connection.Dispose();
+    return metadata;
+  }
+
+  public Task AddToRecordSetAsync(RecordSet recordSet, int id, SqlStateInfo sqlState)
+   => UpdateHitAsync(SqlBuilder.AddToRecordSet(recordSet.Database.Name!), recordSet, id, sqlState);
+
+  public Task RemoveFromRecordSetAsync(RecordSet recordSet, int id, SqlStateInfo sqlState)
+    => UpdateHitAsync(SqlBuilder.RemoveFromRecordSet(recordSet.Database.Name!), recordSet, id, sqlState);
+
+  private static async Task UpdateHitAsync(string sql, RecordSet recordSet, int id, SqlStateInfo sqlState)
+  {
+    var sqlConnection = (SqlConnection)sqlState.Connection!;
+    var sqlTransaction = (SqlTransaction)sqlState.Transaction!;
+
+    using var command = sqlConnection.CreateCommand();
+    command!.Transaction = sqlTransaction;
+    command!.CommandText = sql;
+    command.Parameters.AddWithValue("id", id);
+    command.Parameters.AddWithValue("number", recordSet.MetaData.Number);
+    await command.ExecuteNonQueryAsync(sqlState.CancellationToken);
+  }
+
+  public async Task<ResultSet> RunSqlSearch(DatabaseData databaseData, string sql, Dictionary<string, object> parameters, SqlStateInfo sqlState)
+  {
+    using var sqlConnection = (await GetDbConnectionAsync(databaseData) as SqlConnection)!;
+    var sqlTransaction = (SqlTransaction)sqlState.Transaction!;
+
+    using var command = sqlConnection.CreateCommand();
+    command!.Transaction = sqlTransaction;
+    command!.CommandText = sql;
+
+    foreach (var (key, value) in parameters)
+    {
+      command.Parameters.AddWithValue(key, value);
+    }
+
+    var result = new ResultSet();
+    using var reader = await command.ExecuteReaderAsync(sqlState.CancellationToken);
+    while (await reader.ReadAsync())
+    {
+      result.AddId(reader.GetInt32(0));
+      if (result.Hits == 0 && reader.FieldCount > 1)
+      {
+        result.Hits = reader.GetInt32(1);
+      }
+      if (reader.FieldCount > 2)
+      {
+        result.AddKey(reader[2]);
+      }
+    }
+    return result;
+  }
+
+  public bool CheckIndexTable(DatabaseData databaseData, string tableName)
+  {
+    using var sqlConnection = (GetDbConnection(databaseData) as SqlConnection)!;
+    using var command = sqlConnection.CreateCommand();
+    command.CommandText = "select count(table_name) from [information_schema].[tables] where [table_name] = @tableName";
+    command.Parameters.AddWithValue("@tableName", tableName);
+    var result = command.ExecuteScalar();
+    return (int)result! is 1;
   }
 }
 

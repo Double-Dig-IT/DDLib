@@ -1,8 +1,27 @@
 ﻿namespace DDigit.MetaData;
 
-public class DataSourceData(ObjectTypeEnum objectType, Stream stream, Encoding encoding, string? fileName, bool trace) :
-  BaseData(objectType, stream, encoding, fileName, Properties, trace), IHasScreens
+/// <summary>
+/// Data for a single data source
+/// </summary>
+public class DataSourceData : BaseData, IHasScreens
 {
+  /// <summary>
+  /// Constructor to create an empty <see cref="DataSourceData"/>
+  /// </summary>
+  public DataSourceData() : base(ObjectTypeEnum.DataSource, Properties)
+  {
+  }
+
+  /// <summary>
+  /// Constructor to read <see cref="DataSourceData"/> from disk
+  /// </summary>
+  /// <param name="objectType"></param>
+  /// <param name="stream"></param>
+  /// <param name="encoding"></param>
+  /// <param name="trace"></param>
+  public DataSourceData(ObjectTypeEnum objectType, FileStream stream, Encoding encoding, bool trace) : base(objectType, stream, encoding, Properties, trace)
+  {
+  }
 
   /// <summary>
   /// The type of this data source
@@ -18,7 +37,8 @@ public class DataSourceData(ObjectTypeEnum objectType, Stream stream, Encoding e
   public string? Title
   {
     get => Texts[0].Text;
-    set {
+    set
+    {
       if (Texts.Count > 0)
       {
         Texts[0].Text = value;
@@ -51,7 +71,8 @@ public class DataSourceData(ObjectTypeEnum objectType, Stream stream, Encoding e
   /// </summary>
   public string? HelpKey
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -59,7 +80,8 @@ public class DataSourceData(ObjectTypeEnum objectType, Stream stream, Encoding e
   /// </summary>
   public string? GUID
   {
-    get; private set;
+    get;
+    private set;
   }
 
   /// <summary>
@@ -74,16 +96,20 @@ public class DataSourceData(ObjectTypeEnum objectType, Stream stream, Encoding e
   /// <summary>
   /// A list of screens
   /// </summary>
-  public List<LanguageTextData> Screens
+  public TextsList Screens
   {
     get;
     private set;
   } = [];
 
 
+  /// <summary>
+  /// A list of methods for this data source.
+  /// </summary>
   public List<MethodData> Methods
   {
-    get; private set;
+    get;
+    private set;
   } = [];
 
   /// <summary>
@@ -95,18 +121,28 @@ public class DataSourceData(ObjectTypeEnum objectType, Stream stream, Encoding e
     private set;
   } = [];
 
+  /// <summary>
+  /// A list of export jobs for this data source.
+  /// </summary>
   public List<ExportJobData> ExportJobs
   {
     get;
     private set;
   } = [];
 
-  public List<AccessRightsData> AccessRights
+  /// <summary>
+  /// Access Control List for the data source.
+  /// </summary>
+  public AccessControlList AccessRights
   {
     get;
     private set;
   } = [];
 
+  /// <summary>
+  /// A list of friendly databases for this data source.
+  /// friendly databases are databases where data might be imported from.
+  /// </summary>
   public List<FriendlyDatabaseData> FriendlyDatabases
   {
     get;
@@ -121,11 +157,19 @@ public class DataSourceData(ObjectTypeEnum objectType, Stream stream, Encoding e
     get; private set;
   } = [];
 
+  /// <summary>
+  /// A list of connect entities.
+  /// Introduced in Axiell Collections?
+  /// </summary>
   public List<ConnectEntityData> ConnectEntities
   {
     get; private set;
   } = [];
 
+  /// <summary>
+  /// Override for debugging.
+  /// </summary>
+  /// <returns></returns>
   public override string? ToString() => Title;
 
   internal void Add(FriendlyDatabaseData friendlyDatabase) => FriendlyDatabases.Add(friendlyDatabase);
@@ -157,17 +201,17 @@ public class DataSourceData(ObjectTypeEnum objectType, Stream stream, Encoding e
     new PropertyMap (14, DataTypesEnum.String, "GUID")
   ];
 
-  internal override (PropertyList, IEnumerable<object>)[] Children =>
+  internal override ChildrenList[] Children =>
    [
-      (LanguageTextData.Properties, Screens),
-      (MethodData.Properties, Methods),
-      (JobData.Properties, OutputJobs),
-      (LanguageTextData.Properties, Texts),
-      (AccessRightsData.Properties, AccessRights),
-      (JobData.Properties, ExportJobs),
-      (FriendlyDatabaseData.Properties, FriendlyDatabases),
+     new ChildrenList (Screens, LanguageTextData.Properties),
+      new ChildrenList(Methods, MethodData.Properties),
+      new ChildrenList(OutputJobs, JobData.Properties),
+      new ChildrenList(Texts, LanguageTextData.Properties),
+      new ChildrenList(AccessRights, AccessRightsData.Properties),
+      new ChildrenList(ExportJobs, JobData.Properties),
+      new ChildrenList(FriendlyDatabases, FriendlyDatabaseData.Properties),
       //(CloudObjectData.Properties, CloudObjects), // ToDo: Add cloud objects
-      (TaskData.Properties, Tasks),
-      (ConnectEntityData.Properties, ConnectEntities),
+      new ChildrenList(Tasks, TaskData.Properties),
+      new ChildrenList(ConnectEntities, ConnectEntityData.Properties),
    ];
 }

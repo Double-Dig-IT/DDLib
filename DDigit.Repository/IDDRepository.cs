@@ -2,16 +2,15 @@
 
 public interface IDDRepository
 {
-  Task<int> FindLink(string tableName, DatasetData? dataset,
-                     string? domain, string value, string language,
-                     IDbConnection connection, IDbTransaction transaction, CancellationToken cancellationToken);
+  Task<int> FindLink(string tableName, DatasetData? dataset, string? tag,
+                     string? domain, string value, bool isMultiLingual, string language, SqlStateInfo sqlState);
 
-  Task<RecordSetList> GetRecordSetMetaDataPerDatabaseAsync(DatabaseData database, string? searchTerm, int startFrom = 1, int limit = 0, 
+  Task<RecordSetList> GetRecordSetMetaDataPerDatabaseAsync(DatabaseData database, string? searchTerm, int startFrom = 1, int limit = 0, RecordSetSortEnum? sort = null, SearchSortOrderEnum? sortOrder = null,
                                                         CancellationToken cancellationToken = default);
 
   Task<IEnumerable<RecordLock>> GetRecordLock(DatabaseData databaseData, CancellationToken cancellationToken);
 
-  Task<int> AddWord(IDbConnection connection, IDbTransaction transaction, string text, string language, CancellationToken cancellationToken);
+  Task<int> AddWord(string text, string language, SqlStateInfo sqlState);
 
   /// <summary>
   /// Retrieve a result set, (aka pointer file)
@@ -23,10 +22,9 @@ public interface IDDRepository
   /// <returns>The new ResultSet</returns>
   Task<ResultSet> GetResultSetAsync(SearchTree searchTree, int set);
 
-  Task<int> GetWordNumber(IDbConnection connection, IDbTransaction transaction, string text, string language);
+  Task<int> GetWordNumberAsync(string text, string language, SqlStateInfo sqlState);
 
-  Task<object> ReadDataAsync(DatabaseData database, int id, IDbConnection? connection, 
-    IDbTransaction? transaction, CancellationToken cancellationToken);
+  Task<object> ReadDataAsync(DatabaseData database, int id, SqlStateInfo sqlState);
 
   Task PreparePreviousResultTable(SearchTree searchTree);
 
@@ -41,57 +39,58 @@ public interface IDDRepository
   Task<AutoCompleteResult?> GetAutoCompleteAsync(IEnumerable<FieldData> fieldData, DatasetFilter? datasetFilter, string? value,
                                             int? starFrom, int? limit, string? language, bool count, CancellationToken cancellationToken);
 
-  Task<int> GetNewRecordIdAsync(IDbConnection connection, IDbTransaction transaction, DatabaseData database, DatasetData? dataset);
+  Task<int> GetNewRecordIdAsync(DatabaseData database, DatasetData? dataset, SqlStateInfo sqlState);
 
   Task WriteNewDataAsync(string table, int id,
-                         DateTime creation, DateTime modification, string data,
-                         IDbConnection connection,
-                         IDbTransaction transaction,
-                         CancellationToken cancellationToken);
-     
-  Task UpdateDataAsync(IDbConnection connection, IDbTransaction transaction, string table, int id,
-                  DateTime modification, string data, CancellationToken cancellationToken);
+                         DateTime creation, DateTime modification, string data, SqlStateInfo sqlState);
+
+  Task UpdateDataAsync(string table, int id, DateTime modification, string data, SqlStateInfo sqlState);
 
   Task<IDbTransaction> StartTransactionAsync(IDbConnection connection);
 
-  Task RollbackAsync(IDbTransaction transaction, CancellationToken cancellationToken);
+  Task RollbackAsync(SqlStateInfo sqlState);
 
-  Task CommitAsync(IDbTransaction transaction, CancellationToken cancellationToken);
+  Task CommitAsync(SqlStateInfo sqlState);
 
   Task<IDbConnection> GetDbConnectionAsync(DatabaseData database);
 
-  Task<int> AddIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, IntegerIndexRow row, CancellationToken cancellationToken);
+  Task<int> AddIndexKeyAsync(IntegerIndexRow row, SqlStateInfo sqlState);
 
-  Task<int> DeleteIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, IntegerIndexRow row, CancellationToken cancellationToken);
+  Task<int> AddIndexKeyAsync(string? fullTextTable, TermIndexRow row, SqlStateInfo sqlState);
 
-  Task<int> AddIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, string? fullTextTable, TermIndexRow row, CancellationToken cancellationToken);
+  Task<int> AddIndexKeyAsync(DateIndexRow dateRow, SqlStateInfo sqlState);
 
-  Task<int> DeleteIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, string? fullTextTable, TermIndexRow row, CancellationToken cancellationToken);
+  Task<int> AddIndexKeyAsync(IsoDateIndexRow dateRow, SqlStateInfo sqlState);
 
-  Task<int> DeleteIndexKeysAsync(IDbConnection connection, IDbTransaction transaction, string tableName, int id, CancellationToken cancellationToken);
+  Task<int> AddIndexKeyAsync(BooleanIndexRow booleanRow, SqlStateInfo sqlState);
 
-  Task<List<int>> ReadLinkedRecordIdsAsync(IDbConnection connection, IDbTransaction transaction, string table, int id, CancellationToken cancellationToken);
+  Task<int> AddIndexKeyAsync(string? fullTextTable, AlphaNumericIndexRow alphaNumericRow, SqlStateInfo sqlState);
 
-  Task<int> AddIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, DateIndexRow dateRow, CancellationToken cancellationToken);
+  Task<int> DeleteIndexKeyAsync(IntegerIndexRow row, SqlStateInfo sqlState);
 
-  Task<int> DeleteIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, DateIndexRow dateRow, CancellationToken cancellationToken);
+  Task<int> DeleteIndexKeyAsync(string? fullTextTable, TermIndexRow row, SqlStateInfo sqlState);
 
-  Task<int> AddIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, IsoDateIndexRow dateRow, CancellationToken cancellationToken);
+  Task<int> DeleteIndexKeysAsync(string tableName, int id, SqlStateInfo sqlState);
 
-  Task<int> DeleteIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, IsoDateIndexRow dateRow, CancellationToken cancellationToken);
+  Task<int> DeleteIndexKeyAsync(DateIndexRow dateRow, SqlStateInfo sqlState);
 
-  Task<int> AddIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, BooleanIndexRow booleanRow, CancellationToken cancellationToken);
+  Task<int> DeleteIndexKeyAsync(IsoDateIndexRow dateRow, SqlStateInfo sqlState);
 
-  Task<int> DeleteIndexKeyAsync(IDbConnection connection, IDbTransaction transaction, BooleanIndexRow booleanRow, CancellationToken cancellationToken);
+  Task<int> DeleteIndexKeyAsync(BooleanIndexRow booleanRow, SqlStateInfo sqlState);
 
-  Task<int> AddIndexKey(IDbConnection connection, IDbTransaction transaction, string? fullTextTable, AlphaNumericIndexRow alphaNumericRow, CancellationToken cancellationToken);
+  Task<int> DeleteIndexKeyAsync(string? fullTextTable, AlphaNumericIndexRow alphaNumericRow, SqlStateInfo sqlState);
 
-  Task<int> DeleteIndexKey(IDbConnection connection, IDbTransaction transaction, string? fullTextTable, AlphaNumericIndexRow alphaNumericRow, CancellationToken cancellationToken);
+  Task<List<int>> ReadLinkedRecordIdsAsync(string table, int id, SqlStateInfo sqlState);
 
   Task<int> WriteRecordSetAsync(string folder, RecordSetMetaData metaData, ResultSet set, CancellationToken cancellationToken);
 
   Task DeleteRecordSetAsync(string folder, string database, int setNo, CancellationToken cancellationToken);
-  Task<List<HierarchyNode>> SearchLocationsAsync(DatabaseData locations, string nameField, string barcodeField, string value, SearchLimits limits);
-  Task<IEnumerable<int>> SearchLinksAsync(DatabaseData database, DatasetData dataset, FieldData field, string searchValue, string domain, SearchLimits limits);
-  Task<string> GetAutoNumberValue(IDbConnection connection, IDbTransaction transaction, FieldData fieldData, CancellationToken cancellationToken);
+  Task<IEnumerable<int>> SearchLinksAsync(DatabaseData database, DatasetData? dataset, FieldData field, string searchValue, string domain, SearchLimits limits, SqlStateInfo sqlState);
+  Task<string> GetAutoNumberValue(FieldData fieldData, SqlStateInfo sqlState);
+  Task<RecordSetMetaData?> GetResultSetMetaDataAsync(DatabaseData database, int set, CancellationToken cancellationToken);
+  Task AddToRecordSetAsync(RecordSet resultSet, int id, SqlStateInfo sqlState);
+  Task RemoveFromRecordSetAsync(RecordSet recordSet, int id, SqlStateInfo sqlState);
+  Task<ResultSet> RunSqlSearch(DatabaseData databaseData, string sql, Dictionary<string, object> parameters, SqlStateInfo sqlState);
+  Task<int> WriteRecordSetMetaDataAsync(RecordSetMetaData metaData, SqlStateInfo sqlState);
+  bool CheckIndexTable(DatabaseData databaseData, string tableName);
 }

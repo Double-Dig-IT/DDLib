@@ -60,21 +60,22 @@ public class FindAdlibRecordSet : DDCmdlet
   [Parameter]
   public string? Language
   {
-    get; set;
+    get;
+    set;
   }
 
   /// <summary>
   /// Perform the search asynchronously
   /// </summary>
   protected override void ProcessRecord()
-  {
+  { 
     Result = RunWithEvent(
         () => provider.MilestoneReached += DataProvider_MilestoneChanged,
         () => provider.FindRecordSet(WorkingDirectory, Database, Dataset, Field, Language, Value, Results, default),
         () => provider.MilestoneReached -= DataProvider_MilestoneChanged
     );
 
-    if (SessionState != null)
+    if (SessionState is not null)
     {
       WriteObject(Result);
     }
